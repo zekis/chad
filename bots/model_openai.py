@@ -35,7 +35,7 @@ llm = OpenAI(temperature=0)
 
 
 
-tools = load_tools(["wikipedia", "google-search", "llm-math", "requests", "python_repl","terminal"], llm=llm)
+tools = load_tools(["wikipedia", "google-search", "llm-math", "requests", "python_repl"], llm=llm)
 # Assuming the "human" tool is the first one in the list
 
 
