@@ -1,2 +1,6 @@
 requests==2.23.0
 botbuilder-integration-aiohttp>=4.14.0
+langchain
+openai
+google-api-python-client
+wikipedia
