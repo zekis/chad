@@ -1,8 +1,11 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
-
+from dotenv import find_dotenv, load_dotenv
 import os
 import json
+import random
+import requests
+
 
 from typing import List
 from botbuilder.core import CardFactory, TurnContext, MessageFactory
@@ -10,23 +13,93 @@ from botbuilder.core.teams import TeamsActivityHandler, TeamsInfo
 from botbuilder.schema import CardAction, HeroCard, Mention, ConversationParameters, Attachment, Activity
 from botbuilder.schema.teams import TeamInfo, TeamsChannelAccount
 from botbuilder.schema._connector_client_enums import ActionTypes
-from bots.model_openai import chad_response
+#from bots.model_openai import model_response
 
 from typing import Dict
 
-from botbuilder.core import ActivityHandler, TurnContext
+
 from botbuilder.schema import ChannelAccount, ConversationReference, Activity
 
 
+from langchain.agents import load_tools
+from langchain.agents import ZeroShotAgent, AgentExecutor
+from langchain.memory import ConversationBufferMemory
+from langchain import OpenAI, LLMChain
+from langchain.llms import OpenAI
+from langchain.agents import tool
+
+
+thinking_messages = [
+    "Just a moment...",
+    "Let me check on that...",
+    "Hang on a sec...",
+    "Give me a second...",
+    "Thinking...",
+    "One moment, please...",
+    "Hold on...",
+    "Let me see...",
+    "Processing your request...",
+    "Let me think for a bit...",
+    "Let me get that for you...",
+    "Bear with me...",
+    "Almost there...",
+    "Wait a moment...",
+    "Checking...",
+    "Calculating...",
+    "Give me a moment to think...",
+    "I'm on it...",
+    "Searching for the answer...",
+    "I need a second...",
+]
 
 ADAPTIVECARDTEMPLATE = "resources/UserMentionCardTemplate.json"
 
 class TeamsConversationBot(TeamsActivityHandler):
+    
+    
+
+    load_dotenv(find_dotenv())
+    llm = OpenAI(temperature=0)
+
+    tools = load_tools(["human","wikipedia", "google-search", "llm-math", "requests"], llm=llm)
+    # Assuming the "human" tool is the first one in the list
+    # Set the custom prompt and input functions
+    
+
+    prefix = """Have a conversation with a human, answering the following questions as best you can. You have access to the following tools:"""
+    suffix = """and the windows terminal. Begin!"
+
+    {chat_history}
+    Question: {input}
+    {agent_scratchpad}"""
+
+    prompt = ZeroShotAgent.create_prompt(
+        tools, 
+        prefix=prefix, 
+        suffix=suffix, 
+        input_variables=["input", "chat_history", "agent_scratchpad"]
+    )
+    memory = ConversationBufferMemory(memory_key="chat_history")
+
+    llm_chain = LLMChain(llm=OpenAI(temperature=0), prompt=prompt)
+    agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+    agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
+    
+
+
     def __init__(self, app_id: str, app_password: str, conversation_references: Dict[str, ConversationReference]):
         self._app_id = app_id
         self._app_password = app_password
         self.conversation_references = conversation_references
-    
+
+        self.tools[0].prompt_func = self.custom_prompt_func
+        self.tools[0].input_func = self.custom_input_func
+
+       
+
+    async def on_conversation_update_activity(self, turn_context: TurnContext):
+        self._add_conversation_reference(turn_context.activity)
+        return await super().on_conversation_update_activity(turn_context)
 
     async def on_teams_members_added(  # pylint: disable=unused-argument
         self,
@@ -45,32 +118,10 @@ class TeamsConversationBot(TeamsActivityHandler):
         TurnContext.remove_recipient_mention(turn_context.activity)
         text = turn_context.activity.text.strip().lower()
 
-        if "mention me" in text:
-            await self._mention_adaptive_card_activity(turn_context)
-            return
+        message = random.choice(thinking_messages)
+        await turn_context.send_activity(message)
 
-        if "mention" in text:
-            await self._mention_activity(turn_context)
-            return
-
-        if "update" in text:
-            await self._send_card(turn_context, True)
-            return
-
-        if "message" in text:
-            await self._message_all_members(turn_context)
-            return
-
-        if "who" in text:
-            await self._get_member(turn_context)
-            return
-
-        if "delete" in text:
-            await self._delete_card_activity(turn_context)
-            return
-
-        await turn_context.send_activity("One sec....")
-        response = chad_response(turn_context.activity.text, self)
+        response = self.model_response(text)
         await turn_context.send_activity(response)
         #await self._send_card(response, False)
         return
@@ -252,3 +303,32 @@ class TeamsConversationBot(TeamsActivityHandler):
         self.conversation_references[
             conversation_reference.user.id
         ] = conversation_reference
+
+
+    #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
+    def model_response(self, msg):
+        try:
+            #history.predict(input=msg)
+            if msg == 'agent.template':
+                response = "NA:"
+                return response
+            response = self.agent_chain.run(msg)
+            #history.chat_memory.add_ai_message(response)
+            return response
+        except Exception as e:
+            return f"An exception occurred: {e}"
+        
+
+    def send_request(url, data):
+        headers = {'Content-Type': 'application/json'}
+        response = requests.post(url, data=json.dumps(data), headers=headers, timeout=5.0)
+        return response
+    
+
+    def custom_prompt_func(prompt: str, atr ) -> None:
+        print(prompt)
+        print(atr)
+        return atr
+        
+    def custom_input_func(atr) -> str:
+        return atr
