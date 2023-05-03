@@ -1,9 +1,5 @@
-__pycache__/config.cpython-39.pyc
-bots/__pycache__/__init__.cpython-39.pyc
-bots/__pycache__/model_openai.cpython-39.pyc
-__pycache__/process_notes.cpython-39.pyc
-bots/__pycache__/teams_conversation_bot.cpython-39.pyc
-__pycache__/onenote_export.cpython-39.pyc
+
+__pycache__
 .env
 /.venv
-
+bots/__pycache__

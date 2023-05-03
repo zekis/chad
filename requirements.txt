@@ -4,3 +4,6 @@ langchain
 openai
 google-api-python-client
 wikipedia
+python-dotenv
+faiss-cpu
+tiktoken
