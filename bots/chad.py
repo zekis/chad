@@ -64,7 +64,7 @@ ADAPTER.on_turn_error = on_error
 APP_ID = SETTINGS.app_id if SETTINGS.app_id else uuid.uuid4()
 
 # Create the Bot
-BOT = TeamsConversationBot(config.APP_ID, config.APP_PASSWORD, CONVERSATION_REFERENCES)
+BOT = TeamsConversationBot(config.APP_ID, config.APP_PASSWORD)
 
 
 # Listen for incoming requests on /api/messages.
