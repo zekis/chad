@@ -16,10 +16,9 @@ from botbuilder.core import (
 from botbuilder.core.integration import aiohttp_error_middleware
 from botbuilder.schema import Activity, ActivityTypes, ConversationReference
 
-from bots import TeamsConversationBot
+from teams.teams_conversation_bot import TeamsConversationBot
 import config
 
-# Create adapter.
 # See https://aka.ms/about-bot-adapter to learn more about how bots work.
 SETTINGS = BotFrameworkAdapterSettings(config.APP_ID, config.APP_PASSWORD)
 ADAPTER = BotFrameworkAdapter(SETTINGS)
@@ -62,9 +61,9 @@ ADAPTER.on_turn_error = on_error
 # We generate a random AppId for this case only. This is not required for production, since
 # the AppId will have a value.
 APP_ID = SETTINGS.app_id if SETTINGS.app_id else uuid.uuid4()
-
+CONVERSATION_REFERENCES: Dict[str, ConversationReference] = dict()
 # Create the Bot
-BOT = TeamsConversationBot(config.APP_ID, config.APP_PASSWORD)
+BOT = TeamsConversationBot(config.APP_ID, config.APP_PASSWORD, CONVERSATION_REFERENCES)
 
 
 # Listen for incoming requests on /api/messages.
@@ -83,25 +82,8 @@ async def messages(req: Request) -> Response:
         return json_response(data=response.body, status=response.status)
     return Response(status=HTTPStatus.OK)
 
-# Listen for requests on /api/notify, and send a messages to all conversation members.
-async def notify(req: Request) -> Response:  # pylint: disable=unused-argument
-    try:
-        request_data = await req.json()
-        print(request_data)
-        await _send_proactive_message()
-        return Response(status=HTTPStatus.OK, text="Proactive messages have been sent")
-    except Exception as e:
-        print(str(e))
-        return web.Response(status=HTTPStatus.INTERNAL_SERVER_ERROR, text="An error occurred while sending the proactive messages.")
 
-# Send a message to all conversation members.
-# This uses the shared Dictionary that the Bot adds conversation references to.
-async def _send_proactive_message():
-    for conversation_reference in CONVERSATION_REFERENCES.values():
-        await ADAPTER.continue_conversation(
-            conversation_reference,
-            lambda turn_context: turn_context.send_activity("test"),
-            APP_ID,
-        )
+async def process_message():
+    await BOT.process_message(ADAPTER)
 
 

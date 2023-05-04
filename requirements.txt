@@ -7,3 +7,4 @@ wikipedia
 python-dotenv
 faiss-cpu
 tiktoken
+pika
