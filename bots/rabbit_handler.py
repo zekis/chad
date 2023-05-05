@@ -18,27 +18,6 @@ class RabbitHandler(BaseCallbackHandler):
         self.message_channel = message_channel
         self.color = color
 
-    # def on_tool_end(
-    #     self,
-    #     output: str,
-    #     color: Optional[str] = None,
-    #     observation_prefix: Optional[str] = None,
-    #     llm_prefix: Optional[str] = None,
-    #     **kwargs: Any,
-    # ) -> None:
-    #     """If not the final action, print out observation."""
-    #     if observation_prefix is not None:
-    #         print_text(f"\n{observation_prefix}")
-    #         self.message_channel.basic_publish(exchange='',routing_key='notify',body=output)
-    #     print_text(output, color=color if color else self.color)
-    #     if llm_prefix is not None:
-    #         print_text(f"\n{llm_prefix}")
-
-    # def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
-    #     print(outputs)
-    #     self.message_channel.basic_publish(exchange='',routing_key='notify',body=outputs)
-    #     """Run when chain ends running."""
-    
     def on_agent_action(
         self, action: AgentAction, color: Optional[str] = None, **kwargs: Any
     ) -> Any:

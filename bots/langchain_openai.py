@@ -66,7 +66,7 @@ embedding_size = 1536
 index = faiss.IndexFlatL2(embedding_size)
 vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
 
-prefix = """Have a conversation with a human, answering the following questions as best you can. You have access to the following tools:"""
+prefix = """Have a conversation with a human in Australia, answering the following questions as best you can. You have access to the following tools:"""
 suffix = """Begin!"
 
 {chat_history}
