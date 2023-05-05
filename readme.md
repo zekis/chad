@@ -1,34 +1,15 @@
 <H1>Description</H1>
 
-Combines Langchain and MS Teams BOT to allow chatting with openAI in Teams 
+Combines Langchain, RabbitMQ and MS Teams BOT to allow chatting asynchronous with openAI in Teams
 
+Install rabbitMQ https://www.rabbitmq.com/install-debian.html
 
-<H1>Windows Install Instructions</H1>
+Create virtual environment
 
-Prerequisites, 
-NGROK 
-You will need to create an account at ngrok.com
-installe the windows version using Choco and forwarding port 3978.
-```
-ngrok http --host-header=rewrite 3978
-```
+Update env.example and Rename to .env
 
+Pip Install -r Requirements.txt
 
-Check out this repo
+Run teams API with python ./server.py
 
-Right click on folder and open with visual code
-
-Click on requirements.txt
-
-Click create environment
-
-Create API keys for Google Search, Open AI and MS Azure Bot and add to env.example
-
-Rename env.example to .env
-
-To setup the bot in teams see https://github.com/microsoft/botbuilder-python
-
-
-<h1>Run</h1>
-
-Run with python ./app.py
+Then run the Bot using python ./ai.py

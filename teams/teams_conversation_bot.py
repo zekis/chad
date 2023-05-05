@@ -70,7 +70,11 @@ class TeamsConversationBot(TeamsActivityHandler):
         text = turn_context.activity.text.strip().lower()
 
         message = random.choice(thinking_messages)
-        self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
+        response = self.message_channel.queue_declare('message', passive=True)
+        if response.method.message_count > 1:
+            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Im already working on {response.method.message_count} messages"))
+        
+        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
         self.message_channel.basic_publish(exchange='',routing_key='message',body=text)
 
@@ -86,7 +90,7 @@ class TeamsConversationBot(TeamsActivityHandler):
 
 
     async def process_message(self, ADAPTER):
-        method, properties, body = self.notify_channel.basic_get(queue='notify')
+        method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
         if body:
             for conversation_reference in self.conversation_references.values():
                 await ADAPTER.continue_conversation(
