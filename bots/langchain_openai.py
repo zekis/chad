@@ -25,9 +25,13 @@ from tempfile import TemporaryDirectory
 from langchain.vectorstores import FAISS
 from langchain.docstore import InMemoryDocstore
 from langchain.embeddings import OpenAIEmbeddings
+
+import time #used to timeout the QnA callback
 import pika
 # Initialize the vectorstore as empty
 import faiss
+
+
 
 load_dotenv(find_dotenv())
 
@@ -46,6 +50,7 @@ llm = OpenAI(temperature=0)
 toolkit = FileManagementToolkit()
 
 def get_input():
+    timeout = time.time() + 60*5   # 5 minutes from now
     #print("Insert your text. Press Ctrl-D (or Ctrl-Z on Windows) to end.")
     contents = []
     while True:
@@ -53,14 +58,18 @@ def get_input():
         if msg:
             question = msg.decode("utf-8")
             break
+        if time.time() > timeout:
+            question = "I dont know"
+            break
+        time.sleep(1)
     return question
 
 def send_prompt(query):
-    publish(query)
+    publish(query + "?")
 
 
 #toolkit.get_tools()
-tools = load_tools(["human", "wikipedia", "google-search", "llm-math", "requests_all"],input_func=get_input, prompt_func=send_prompt, llm=llm)
+tools = load_tools(["wikipedia", "google-search", "llm-math", "requests_all","human","terminal"],input_func=get_input, prompt_func=send_prompt, llm=llm)
 tools.extend(toolkit.get_tools())
 embedding_size = 1536
 index = faiss.IndexFlatL2(embedding_size)

@@ -12,6 +12,7 @@ from botbuilder.core import (
     BotFrameworkAdapterSettings,
     TurnContext,
     BotFrameworkAdapter,
+    ShowTypingMiddleware,
 )
 from botbuilder.core.integration import aiohttp_error_middleware
 from botbuilder.schema import Activity, ActivityTypes, ConversationReference
@@ -56,7 +57,7 @@ async def on_error(context: TurnContext, error: Exception):
 
 
 ADAPTER.on_turn_error = on_error
-
+ADAPTER.use(ShowTypingMiddleware(delay=0.01, period=2.0))
 # If the channel is the Emulator, and authentication is not in use, the AppId will be null.
 # We generate a random AppId for this case only. This is not required for production, since
 # the AppId will have a value.

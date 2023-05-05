@@ -8,13 +8,13 @@ import random
 import requests
 
 from typing import List
-from botbuilder.core import CardFactory, TurnContext, MessageFactory
+from botbuilder.core import CardFactory, TurnContext, MessageFactory, ShowTypingMiddleware
 from botbuilder.core.teams import TeamsActivityHandler, TeamsInfo
 from botbuilder.schema import CardAction, HeroCard, Mention, ConversationParameters, Attachment, Activity
 from botbuilder.schema.teams import TeamInfo, TeamsChannelAccount
 from botbuilder.schema._connector_client_enums import ActionTypes
 #from bots.model_openai import model_response
-#rabbitmq
+from botbuilder.core import BotFrameworkAdapter
 import pika
 
 from typing import Dict
@@ -47,6 +47,7 @@ thinking_messages = [
 
 ADAPTIVECARDTEMPLATE = "resources/UserMentionCardTemplate.json"
 
+
 class TeamsConversationBot(TeamsActivityHandler):
     
     load_dotenv(find_dotenv())
@@ -57,11 +58,13 @@ class TeamsConversationBot(TeamsActivityHandler):
 
     message_channel.queue_declare(queue='message')
     notify_channel.queue_declare(queue='notify')
+    #ADAPTER = BotFrameworkAdapter
 
     def __init__(self, app_id: str, app_password: str, conversation_references: Dict[str, ConversationReference]):
         self.conversation_references = conversation_references
         self._app_id = app_id
         self._app_password = app_password
+        #self.ADAPTER = ADAPTER
         
 
     async def on_message_activity(self, turn_context: TurnContext):
@@ -74,7 +77,8 @@ class TeamsConversationBot(TeamsActivityHandler):
         if response.method.message_count > 1:
             self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Im already working on {response.method.message_count} messages"))
         
-        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+        #self.notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+        
 
         self.message_channel.basic_publish(exchange='',routing_key='message',body=text)
 
