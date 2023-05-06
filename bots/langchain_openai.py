@@ -11,6 +11,7 @@ from langchain.llms import OpenAI
 from langchain.agents import tool
 from langchain.callbacks import StdOutCallbackHandler
 from bots.rabbit_handler import RabbitHandler
+from bots.loaders.todo import get_all_todo_tasks
 
 from langchain.tools.file_management import (
     ReadFileTool,
@@ -69,7 +70,7 @@ def send_prompt(query):
 
 
 #toolkit.get_tools()
-tools = load_tools(["wikipedia", "google-search", "llm-math", "requests_all","human","terminal"],input_func=get_input, prompt_func=send_prompt, llm=llm)
+tools = load_tools(["wikipedia", "google-search", "llm-math", "requests_all","human","terminal"], commands=["git","ls"], input_func=get_input, prompt_func=send_prompt, llm=llm)
 tools.extend(toolkit.get_tools())
 embedding_size = 1536
 index = faiss.IndexFlatL2(embedding_size)
@@ -93,26 +94,20 @@ handler = RabbitHandler(notify_channel)
 llm_chain = LLMChain(llm=OpenAI(temperature=0), prompt=prompt, callbacks=[handler])
 agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
 agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
-# agent = AutoGPT.from_llm_and_tools(
-#     ai_name="Tom",
-#     ai_role="Assistant",
-#     tools=tools,
-#     llm=ChatOpenAI(temperature=0),
-#     memory=vectorstore.as_retriever()
-# )
-# Set verbose to be true
-#agent_chain.verbose = True
+
 
 #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
 def model_response():
+    print("Ready\n")
     while True:
         try:
             #history.predict(input=msg)
             msg = consume()
             if msg:
                 question = msg.decode("utf-8")
-                if question == 'agent.template':
-                    response = "NA:"
+                if question == 'todo':
+                    response = tasks_to_string(get_all_todo_tasks())
+                    publish(response)
                     return response
                 response = agent_chain.run(question, callbacks=[handler])
                 #history.chat_memory.add_ai_message(response)
@@ -129,3 +124,11 @@ def publish(message):
 def consume():
     method, properties, body = notify_channel.basic_get(queue='message', auto_ack=True)
     return body
+
+def tasks_to_string(task_list):
+#list current tasks
+    task_str = ""
+    for task in task_list:
+        print(task)
+        task_str = task_str + "\n" + str(task)
+    return task_str

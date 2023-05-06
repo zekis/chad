@@ -8,3 +8,4 @@ load_dotenv()
 PORT = 3978
 APP_ID = os.getenv("MicrosoftAppId")
 APP_PASSWORD = os.getenv("MicrosoftAppPassword")
+tenant_id = os.getenv("tenant_id")
