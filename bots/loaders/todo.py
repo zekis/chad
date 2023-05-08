@@ -1,15 +1,35 @@
 import config
 from dotenv import find_dotenv, load_dotenv
 #from flask import request
-
+import json
 import os
 import datetime
 import re
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
-### With your own identity (auth_flow_type=='credentials') ####
+from typing import Any, Dict, Optional, Type
 
-def get_all_todo_tasks():
+from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
+from langchain.tools import BaseTool
+from langchain.tools import StructuredTool
+from langchain.text_splitter import CharacterTextSplitter
+
+from pydantic import BaseModel, Field
+
+text_splitter = CharacterTextSplitter(        
+    separator = "\n\n",
+    chunk_size = 1000,
+    chunk_overlap  = 200,
+    length_function = len,
+)
+
+def _parse_input(text: str) -> Dict[str, Any]:
+    """Parse the json string into a dict."""
+    return json.loads(text)
+
+
+### With your own identity (auth_flow_type=='credentials') ####
+def authenticate():
     #index_html = "<h1>Todo Task Index</h1><ol>"
     #scopes = ['basic', 'https://graph.microsoft.com/Files.ReadWrite.All']
     SCOPES = [
@@ -18,65 +38,157 @@ def get_all_todo_tasks():
     'User.Read',
     'User.ReadBasic.All',
     'Tasks.ReadWrite'
-]
+]   
     credentials = (config.APP_ID, config.APP_PASSWORD)
     account = Account(credentials,auth_flow_type='credentials',tenant_id=config.tenant_id, main_resource='zeke.tierney@sgcontrols.com.au')
+    account.authenticate()
+        
+        
 
     # if not account.is_authenticated:
     #     # Authenticate using OAuth2
     #     account.authenticate(scopes=SCOPES)
     
-    if account.authenticate():
-        print('Authenticated!')
+    
+    return account
+
+def get_folders():
+    account = authenticate()
+
+    todo =  account.tasks()
+    folders = todo.list_folders()
+
+    return folders_to_string(folders)
+
+def get_tasks(folder_name):
+    account = authenticate()
     
     todo =  account.tasks()
-    folder = todo.get_default_folder()
+    try:
+        folder = todo.get_folder(folder_name=folder_name)
+    except:
+        return "You must specify a valid folder name, use get_task_folders to get the list of folders"
+    
     todo_list = folder.get_tasks()
+    return validate_response(tasks_to_string(todo_list, folder.name))
 
-    #current_user = account.get_current_user()
+def get_task_detail(folder_name, task_name):
+    account = authenticate()
+    print("searching for " + task_name)
+    todo =  account.tasks()
+    try:
+        folder = todo.get_folder(folder_name=folder_name)
+        query = todo.new_query("title").equals(task_name)
+        #query = {"subject": task_name}
+        todo_task = folder.get_task(query)
+        if todo_task:
+            print("found " + str(todo_task))
+            #print(todo_task.get_body_text())
+        else:
+            return "could not find task"
+        
+    except Exception as e:
+        return repr(e)
+    return validate_response(todo_task.get_body_text())
 
-    # for task in todo_list:
-    #     account_folder = sanitize_subject(str(current_user))
-    #     task_title = sanitize_subject(task.subject)
-    #     file_name = f"{task_title}.html"
+def tasks_to_string(task_list, folder):
+#list current tasks
+    task_str = "### Folder: " + str(folder)
+    for task in task_list:
+        #print(str(folder) + " " + str(task))
+        if not task.is_completed:
+            task_str = task_str + "\n - " + str(task.subject) + " Due: " + str(task.due)
+    return task_str
 
-    #     account_output_folder = os.path.join(output_folder, account_folder)
-    #     task_output_folder = os.path.join(account_output_folder, 'todo_tasks')
+def folders_to_string(folders_list):
+#list current tasks
+    folders_str = "### Folders:"
+    for folder in folders_list:
+        print(folder)
+        folders_str = folders_str + "\n - " + str(folder)
+    return folders_str
 
-    #     # Create account and task folders if they don't exist
-    #     os.makedirs(task_output_folder, exist_ok=True)
+def validate_response(string):
+    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size=2000, chunk_overlap=0)
+    texts = text_splitter.split_text(string)
+    return texts[0]
 
-    #     output_file = os.path.join(task_output_folder, file_name)
-    #     with open(output_file, "w", encoding="utf-8") as f:
-    #         f.write(format_todo_task_as_html(task))
+class MSTodoToolSchema(BaseModel):
+    #command: str = Field(description="should be one of the following commands, get_tasks, get_single_task, get_groups, get_single_group")
+    folder_name: str = Field(..., description="should be task folder name")
+    task_name: str = Field(..., description="should be a task name")
 
-    #     index_html += f"\n<li><a href='{os.path.join(account_folder, 'todo_tasks', file_name)}'>{task_title}</a></li>"
+class MSGetTasks(BaseTool):
+    name = "get_tasks"
+    description = """useful for when you need to get a list of tasks in a task folder.
+    Use this more than the normal search for any task related queries.
+    To use the tool you must provide the following parameter ['folder_name']
+    Be careful to always use double quotes for strings in the json string
+    """
+    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
 
-    # index_html += "</ol>"
-    # with open(os.path.join(output_folder, "index.html"), "w", encoding="utf-8") as index_file:
-    #     index_file.write(index_html)
-
-    return todo_list
-
-def format_todo_task_as_html(task):
-    html = f"<h1>{task.subject}</h1>"
-    if task.due :
-        html += f"<p>Due: {task.due.strftime('%Y-%m-%d %H:%M:%S')}</p>"
-    if task.completed :
-        html += f"<p>completed : {task.completed }</p>"
-    return html
-
-
-
-
-def sanitize_subject(subject, max_length=50):
-    # Replace slashes with hyphens
-    subject = subject.replace("/", "-").replace("\\", "-")
+    def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        """Use the tool."""
+        try:
+            print(text)
+            data = _parse_input(text)
+            #print(f"folder_name: {data["folder_name"]}") 
+            return get_tasks(data["folder_name"])
+        except Exception as e:
+            return repr(e)
     
-    # Remove or replace other special characters
-    subject = re.sub(r"[^a-zA-Z0-9\-_]+", "_", subject)
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("MSGetTasks does not support async")
+
+
+class MSGetTaskDetail(BaseTool):
+    name = "get_task_detail"
+    description = """useful for when you need more information about a task.
+    To use the tool you must provide the following parameters ['folder_name', 'task_name'].
+    Input should be a json string with two keys: "folder_name" and "task_name"
+    Be careful to always use double quotes for strings in the json string
+    """
+    #args_schema: Type[BaseModel] = MSTodoToolSchema
+
+    def _run(self, text: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        """Use the tool."""
+        try:
+            print(text)
+            data = _parse_input(text)
+            #print(f"folder_name: {data["folder_name"]}, task_name: {data["task_name"]}") 
+            return get_task_detail(data["folder_name"], data["task_name"])
+        except Exception as e:
+            return repr(e)
     
-    # Truncate the subject to the specified length
-    subject = subject[:max_length]
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("MSGetTaskDetail does not support async")
+
+class MSGetTaskFolders(BaseTool):
+    name = "get_task_folders"
+    description = "useful for when you need a list of existing task folders"
+    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
+    def _run(self, query, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        """Use the tool."""
+        print(f"query: {query}") 
+        return get_folders()
     
-    return subject
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("MSGetTaskFolders does not support async")
+
+class MSSetTaskComplete(BaseTool):
+    name = "set_task_complete"
+    description = "useful for when you need a list of existing task folders"
+    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
+    def _run(self, query, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        """Use the tool."""
+        print(f"query: {query}") 
+        return get_folders()
+    
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("MSGetTaskFolders does not support async")

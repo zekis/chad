@@ -1,6 +1,6 @@
 import config
 from dotenv import find_dotenv, load_dotenv
-
+import time
 from langchain.experimental import AutoGPT
 from langchain.chat_models import ChatOpenAI
 from langchain.agents import load_tools
@@ -11,7 +11,7 @@ from langchain.llms import OpenAI
 from langchain.agents import tool
 from langchain.callbacks import StdOutCallbackHandler
 from bots.rabbit_handler import RabbitHandler
-from bots.loaders.todo import get_all_todo_tasks
+from bots.loaders.todo import MSTodoToolSchema, MSGetTasks, MSGetTaskFolders, MSGetTaskDetail
 
 from langchain.tools.file_management import (
     ReadFileTool,
@@ -62,7 +62,7 @@ def get_input():
         if time.time() > timeout:
             question = "I dont know"
             break
-        time.sleep(1)
+        time.sleep(0.5)
     return question
 
 def send_prompt(query):
@@ -70,13 +70,23 @@ def send_prompt(query):
 
 
 #toolkit.get_tools()
-tools = load_tools(["wikipedia", "google-search", "llm-math", "requests_all","human","terminal"], commands=["git","ls"], input_func=get_input, prompt_func=send_prompt, llm=llm)
-tools.extend(toolkit.get_tools())
+tools = load_tools(["wikipedia", "google-search", "llm-math", "requests_all","human"], input_func=get_input, prompt_func=send_prompt, llm=llm)
+
+#MSGetTaskFolders = MSGetTaskFolders()
+#MSGetTasks = MSGetTasks()
+#MSGetTaskDetail = MSGetTaskDetail()
+
+tools.append(MSGetTaskFolders())
+tools.append(MSGetTasks())
+tools.append(MSGetTaskDetail())
+# for tool in tools:
+#     print(str(tool) + "\n\n")
+#tools.extend(toolkit.get_tools())
 embedding_size = 1536
 index = faiss.IndexFlatL2(embedding_size)
 vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
 
-prefix = """Have a conversation with a human in Australia, answering the following questions as best you can. You have access to the following tools:"""
+prefix = """Have a conversation with a human in Australia, answering the following questions using markdown formating as best you can. You have access to the following tools:"""
 suffix = """Begin!"
 
 {chat_history}
@@ -105,15 +115,20 @@ def model_response():
             msg = consume()
             if msg:
                 question = msg.decode("utf-8")
-                if question == 'todo':
-                    response = tasks_to_string(get_all_todo_tasks())
+                if question == 'ping':
+                    response = 'pong'
                     publish(response)
-                    return response
+                    #return response
+                if question == 'restart':
+                    response = 'ok'
+                    publish(response)
+                    #return response
                 response = agent_chain.run(question, callbacks=[handler])
                 #history.chat_memory.add_ai_message(response)
                 publish(response)
         except Exception as e:
             print( f"An exception occurred: {e}")
+        time.sleep(0.5)
 
 def publish(message):
     channel.basic_publish(exchange='',
@@ -125,10 +140,3 @@ def consume():
     method, properties, body = notify_channel.basic_get(queue='message', auto_ack=True)
     return body
 
-def tasks_to_string(task_list):
-#list current tasks
-    task_str = ""
-    for task in task_list:
-        print(task)
-        task_str = task_str + "\n" + str(task)
-    return task_str
