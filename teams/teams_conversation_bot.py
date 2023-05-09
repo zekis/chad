@@ -92,14 +92,25 @@ class TeamsConversationBot(TeamsActivityHandler):
             conversation_reference.user.id
         ] = conversation_reference
 
+    def init_bot(self, bot_name):
+        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Bot {bot_name} Online"))
+        #self.message_channel.basic_publish(exchange='',routing_key='message',body="List the tasks in the AutoCHAD folder and use non task tools to action each one. Once complete mark the task as completed")
+        
+        #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the weather in ellebrook?")
+        #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the latest news for Perth WA?")
+
 
     async def process_message(self, ADAPTER):
-        method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
-        if body:
-            for conversation_reference in self.conversation_references.values():
-                await ADAPTER.continue_conversation(
-                    conversation_reference,
-                    lambda turn_context: turn_context.send_activity(body.decode("utf-8")),
-                    self._app_id,
-                )
-                print(body)
+        for conversation_reference in self.conversation_references.values():
+            method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
+            if body:
+                decoded_body = body.decode("utf-8")
+                if decoded_body == "bot1_online":
+                    self.init_bot("AutoCHAD")
+                else:
+                    await ADAPTER.continue_conversation(
+                        conversation_reference,
+                        lambda turn_context: turn_context.send_activity(decoded_body),
+                        self._app_id,
+                    )
+                    print(decoded_body)

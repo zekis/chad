@@ -83,13 +83,26 @@ def get_task_detail(folder_name, task_name):
         todo_task = folder.get_task(query)
         if todo_task:
             print("found " + str(todo_task))
-            #print(todo_task.get_body_text())
+            body = build_task_sumary(todo_task)
         else:
             return "could not find task"
         
     except Exception as e:
         return repr(e)
-    return validate_response(todo_task.get_body_text())
+    return validate_response(body)
+
+def build_task_sumary(task):
+    body = f"""
+        subject = {task.subject}
+        created = {task.created}
+        modified = {task.modified}
+        importance = {task.importance}
+        is_starred = {task.is_starred}
+        due = {task.due}
+        completed = {task.completed}
+        description = {task.body}
+    """
+    return body
 
 def tasks_to_string(task_list, folder):
 #list current tasks
@@ -111,18 +124,20 @@ def folders_to_string(folders_list):
 def validate_response(string):
     text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size=2000, chunk_overlap=0)
     texts = text_splitter.split_text(string)
+    for text in texts:
+        print(str(text) + "\n")
     return texts[0]
 
-class MSTodoToolSchema(BaseModel):
-    #command: str = Field(description="should be one of the following commands, get_tasks, get_single_task, get_groups, get_single_group")
-    folder_name: str = Field(..., description="should be task folder name")
-    task_name: str = Field(..., description="should be a task name")
+# class MSTodoToolSchema(BaseModel):
+#     #command: str = Field(description="should be one of the following commands, get_tasks, get_single_task, get_groups, get_single_group")
+#     folder_name: str = Field(..., description="should be task folder name")
+#     task_name: str = Field(..., description="should be a task name")
 
 class MSGetTasks(BaseTool):
     name = "get_tasks"
     description = """useful for when you need to get a list of tasks in a task folder.
     Use this more than the normal search for any task related queries.
-    To use the tool you must provide the following parameter ['folder_name']
+    To use the tool you must provide the following parameter ["folder_name"]
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
@@ -145,7 +160,7 @@ class MSGetTasks(BaseTool):
 class MSGetTaskDetail(BaseTool):
     name = "get_task_detail"
     description = """useful for when you need more information about a task.
-    To use the tool you must provide the following parameters ['folder_name', 'task_name'].
+    To use the tool you must provide the following parameters ["folder_name", "task_name"].
     Input should be a json string with two keys: "folder_name" and "task_name"
     Be careful to always use double quotes for strings in the json string
     """
@@ -167,7 +182,9 @@ class MSGetTaskDetail(BaseTool):
 
 class MSGetTaskFolders(BaseTool):
     name = "get_task_folders"
-    description = "useful for when you need a list of existing task folders"
+    description = """useful for when you need a list of existing task folders.
+    Be careful to always use double quotes for strings in the json string
+    """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
 
     def _run(self, query, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
@@ -181,14 +198,106 @@ class MSGetTaskFolders(BaseTool):
 
 class MSSetTaskComplete(BaseTool):
     name = "set_task_complete"
-    description = "useful for when you need a list of existing task folders"
+    description = """
+    Useful for when you need to mark a task as complete
+    To use the tool you must provide the following parameters ["folder_name", "task_name"].
+    Input should be a json string with two keys: "folder_name" and "task_name"
+    Be careful to always use double quotes for strings in the json string
+    """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
 
-    def _run(self, query, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
-        print(f"query: {query}") 
-        return get_folders()
+    def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        try:
+            print(text)
+            data = _parse_input(text)
+            folder_name = data["folder_name"]
+            task_name = data["task_name"]
+            
+            account = authenticate()
+            todo = account.tasks()
+
+            #get the folder and task
+            folder = todo.get_folder(folder_name=folder_name)
+            query = todo.new_query("title").equals(task_name)
+            todo_task = folder.get_task(query)
+            
+            if todo_task:
+                todo_task.mark_completed()
+                todo_task.save()
+                return get_task_detail(folder_name, task_name)
+            else:
+                return "could not find task"
+            
+        except Exception as e:
+            return repr(e)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSGetTaskFolders does not support async")
+        raise NotImplementedError("MSSetTaskComplete does not support async")
+
+class MSCreateTask(BaseTool):
+    name = "create_task"
+    description = """
+    Useful for when you need to create a task.
+    To use the tool you must provide the following parameters ["folder_name", "task_name"].
+    If not sure what folder to create the task in, use the Tasks folder.
+    Input should be a json string with two keys: "folder_name" and "task_name"
+    Be careful to always use double quotes for strings in the json string
+    """
+    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
+    def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        try:
+            print(text)
+            data = _parse_input(text)
+            folder_name = data["folder_name"]
+            task_name = data["task_name"]
+            
+            account = authenticate()
+            todo = account.tasks()
+
+            #get the folder and task
+            folder = todo.get_folder(folder_name=folder_name)
+            new_task = folder.new_task(task_name)
+            new_task.save()
+
+            return get_task_detail(folder_name, task_name)
+        except Exception as e:
+            return repr(e)
+    
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("MSCreateTask does not support async")
+
+class MSDeleteTask(BaseTool):
+    name = "delete_task"
+    description = """
+    Useful for when you need to delete a task.
+    To use the tool you must provide the following parameters ["folder_name", "task_name"].
+    Input should be a json string with two keys: "folder_name" and "task_name"
+    Be careful to always use double quotes for strings in the json string
+    """
+    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
+    def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        try:
+            print(text)
+            data = _parse_input(text)
+            folder_name = data["folder_name"]
+            task_name = data["task_name"]
+            
+            account = authenticate()
+            todo = account.tasks()
+
+            #get the folder and task
+            folder = todo.get_folder(folder_name=folder_name)
+            new_task = folder.new_task(task_name)
+            new_task.delete()
+
+            return get_task_detail(folder_name, task_name)
+        except Exception as e:
+            return repr(e)
+    
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("MSDeleteTask does not support async")
