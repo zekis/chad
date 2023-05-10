@@ -9,7 +9,8 @@ import pika
 import faiss
 
 from bots.rabbit_handler import RabbitHandler
-from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder, scheduler_check_tasks
+from bots.langchain_todo import TaskBot
+from bots.loaders.todo import scheduler_check_tasks
 
 from langchain.experimental import AutoGPT
 from langchain.experimental import BabyAGI
@@ -34,8 +35,6 @@ from langchain.vectorstores import FAISS
 from langchain.docstore import InMemoryDocstore
 from langchain.embeddings import OpenAIEmbeddings
 
-
-
 #callbacks
 def get_input():
     timeout = time.time() + 60*5   # 5 minutes from now
@@ -55,15 +54,12 @@ def get_input():
 def send_prompt(query):
     publish(query + "?")
 
-#this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
+#This code used a language model and tools to fire up additional models to solve tasks
 async def model_response():
-    # print("Ready\n")
-    # publish("bot1_online")
-    # while True:
     try:
         #history.predict(input=msg)
         msg = consume()
-        schedule_msg = consume_schedule()
+        
         if msg:
             question = msg.decode("utf-8")
             print(question)
@@ -78,18 +74,8 @@ async def model_response():
             else:
                 current_date_time = datetime.now() 
                 response = agent_chain.run(input=f"With the current date and time of {current_date_time} {question}? Answer using markdown", callbacks=[handler])
-                #response = agent.run([question])
-                #print("forwarding to AI")
-                #response = baby_agi({"objective": question}, callbacks=[handler])
-                #history.chat_memory.add_ai_message(response)
-                print(response)
-                #publish("How was that?")
     except Exception as e:
         traceback.print_exc()
-        # if e == "KeyboardInterrupt":
-        #     publish("bot1_offline")
-        #     break
-        # print( f"An exception occurred: {e}")
         publish( f"An exception occurred: {e}")
         
 
@@ -100,8 +86,6 @@ def publish(message):
     print(message)
 
 async def process_schedule():
-    #print("schedule")
-    #await publish("Checking my tasks...")
     task = await scheduler_check_tasks(config.Todo_BotsTaskFolder,channel)
     if not task:
         publish("No tasks for me to do.")
@@ -153,72 +137,15 @@ def action_chain(llm) -> LLMChain:
     )
     action_chain = LLMChain(llm=llm, prompt=todo_prompt)
     return action_chain
-  
-
-# def baby_chad_agi(vectorstore, tools):
-#     prefix = """You are an AI who performs one task for an australian engineer based on the following objective: {objective}. Take into account these previously completed tasks: {context}."""
-#     suffix = """Question: {task}
-#     {agent_scratchpad}"""
-#     prompt = ZeroShotAgent.create_prompt(
-#         tools,
-#         prefix=prefix,
-#         suffix=suffix,
-#         input_variables=["objective", "task", "context", "agent_scratchpad"],
-#     )
-
-#     llm = OpenAI(temperature=0)
-#     llm_chain = LLMChain(llm=llm, prompt=prompt)
-#     tool_names = [tool.name for tool in tools]
-#     agent = ZeroShotAgent(llm_chain=llm_chain, allowed_tools=tool_names)
-#     agent_executor = AgentExecutor.from_agent_and_tools(
-#         agent=agent, tools=tools, verbose=True
-#     )
-
-#     # Logging of LLMChains
-#     verbose = True
-#     # If None, will keep on going forever
-#     #max_iterations: Optional[int] = 3
-#     baby_agi = BabyAGI.from_llm(
-#         llm=llm, vectorstore=vectorstore, verbose=verbose, task_execution_chain=agent_executor
-#         #, max_iterations=max_iterations
-#         #task_execution_chain=agent_executor, 
-#     )
-#     return baby_agi
-
 
 def load_chads_tools(llm, action_chain) -> list():
-    #toolkit = FileManagementToolkit()
-    #toolkit.get_tools()
-    #tools = load_tools(["wikipedia", "google-search", "llm-math", "requests_all", "human"], input_func=get_input, prompt_func=send_prompt, llm=llm)
-    tools = load_tools(["wikipedia", "google-search", "human"], input_func=get_input, prompt_func=send_prompt, llm=llm)
- 
-    # chad_chain_tool = Tool(
-    #     name="TODO",
-    #     func=action_chain.run,
-    #     description="useful for when you need to come up with todo lists. Input: an objective to create a todo list for. Output: a todo list for that objective. Only use this for complex objectives. Please be very clear what the objective is!",
-    # )
-    # tools.append(chad_chain_tool)
-
-    # schedule_tool = Tool(
-    #     name="SCHEDULE",
-    #     func=schedule,
-    #     description="useful for creating sheduling a prompt for later. Input: the prompt to be scheduled and date and time ",
-    # )
-
-    # tools.append(schedule_tool)
-    
-
-    tools.append(MSGetTaskFolders())
-    tools.append(MSGetTasks())
-    tools.append(MSGetTaskDetail())
-    tools.append(MSSetTaskComplete())
-    tools.append(MSCreateTask())
-    tools.append(MSDeleteTask())
-    tools.append(MSCreateTaskFolder())
-
-    # for tool in tools:
-    #     print(str(tool) + "\n\n")
-    #tools.extend(toolkit.get_tools())
+    #Load all the other AI models
+    tools = load_tools(["human"], input_func=get_input, prompt_func=send_prompt, llm=llm)
+    #Search Model
+    #Email Model
+    #Todo Model
+    #etc
+    tools.append(TaskBot())
 
     return tools
 
@@ -240,22 +167,14 @@ notify_channel.queue_declare(queue='notify')
 schedule_channel.queue_declare(queue='schedule')
 
 # Define your embedding model
-
 llm = OpenAI(temperature=0)
 
 embeddings_model = OpenAIEmbeddings()
 embedding_size = 1536
 index = faiss.IndexFlatL2(embedding_size)
 vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
-#
 handler = RabbitHandler(notify_channel)
 
 baby_chad_chain = action_chain(llm)
-#load the tools for chad
 tools = load_chads_tools(llm, baby_chad_chain)
-
-#agent, agent_executor = baby_chad_agent(llm, tools)
-
-#configure the baby chad ai
-#baby_agi = baby_chad_agi(vectorstore, tools)
 agent_chain = chad_zero_shot_prompt(llm, tools, vectorstore)

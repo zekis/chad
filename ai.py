@@ -7,7 +7,7 @@ import traceback
 import uuid
 
 from datetime import datetime
-from bots.langchain_openai import model_response, process_schedule, publish
+from bots.langchain_openai_master import model_response, process_schedule, publish
 
 import asyncio
 import threading
@@ -21,6 +21,7 @@ async def task_scheduler():
 async def ai_response():
     publish("Hi There!")
     while True:
+        #model_selector()
         await model_response()
         await asyncio.sleep(0.5)
         #await asyncio.Event().wait()

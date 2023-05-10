@@ -46,31 +46,6 @@ class RabbitHandler(BaseCallbackHandler):
         if message:
             self.message_channel.basic_publish(exchange='',routing_key='notify',body=finish.return_values)
 
-    # def on_llm_start(
-    #     self,
-    #     serialized: Dict[str, Any],
-    #     prompts: List[str],
-    #     *,
-    #     run_id: UUID,
-    #     parent_run_id: Optional[UUID] = None,
-    #     **kwargs: Any,
-    # ) -> Any:
-    #     print(f"on_llm_start Callback {prompts}")
-
-
-    # def on_chain_start(
-    #     self,
-    #     serialized: Dict[str, Any],
-    #     inputs: Dict[str, Any],
-    #     *,
-    #     run_id: UUID,
-    #     parent_run_id: Optional[UUID] = None,
-    #     **kwargs: Any,
-    # ) -> Any:
-    #     #print(f"on_chain_start Callback {inputs}")
-    #     self.message_channel.basic_publish(exchange='',routing_key='notify',body=inputs["objective"])
-        
-
     def on_chain_end(
         self,
         outputs: Dict[str, Any],
@@ -84,33 +59,3 @@ class RabbitHandler(BaseCallbackHandler):
         if message:
             self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
-    # def on_tool_start(
-    #     self,
-    #     serialized: Dict[str, Any],
-    #     input_str: str,
-    #     *,
-    #     run_id: UUID,
-    #     parent_run_id: Optional[UUID] = None,
-    #     **kwargs: Any,
-    # ) -> Any:
-    #     print(f"on_tool_start Callback {input_str}")
-
-    # def on_tool_end(
-    #     self,
-    #     output: str,
-    #     *,
-    #     run_id: UUID,
-    #     parent_run_id: Optional[UUID] = None,
-    #     **kwargs: Any,
-    # ) -> Any:
-    #     print(f"on_tool_end Callback {output}")
-
-    # def on_text(
-    #     self,
-    #     text: str,
-    #     *,
-    #     run_id: UUID,
-    #     parent_run_id: Optional[UUID] = None,
-    #     **kwargs: Any,
-    # ) -> Any:
-    #     print(f"on_text Callback {text}")
