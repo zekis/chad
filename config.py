@@ -9,3 +9,5 @@ PORT = 3978
 APP_ID = os.getenv("MicrosoftAppId")
 APP_PASSWORD = os.getenv("MicrosoftAppPassword")
 tenant_id = os.getenv("tenant_id")
+Todo_PollingIntervalSeconds = float(os.getenv("Todo_PollingIntervalSeconds"))
+Todo_BotsTaskFolder = os.getenv("Todo_BotsTaskFolder")

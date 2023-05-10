@@ -1,8 +1,9 @@
 import traceback
 import config
+from datetime import datetime
 from dotenv import find_dotenv, load_dotenv
 import time
-#from langchain.experimental import AutoGPT
+from langchain.experimental import AutoGPT
 from langchain.experimental import BabyAGI
 from langchain.chat_models import ChatOpenAI
 from langchain.agents import load_tools, Tool
@@ -13,7 +14,7 @@ from langchain.llms import OpenAI
 from langchain.agents import tool
 from langchain.callbacks import StdOutCallbackHandler
 from bots.rabbit_handler import RabbitHandler
-from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask
+from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, scheduler_check_tasks
 
 from langchain.tools.file_management import (
     ReadFileTool,
@@ -54,41 +55,43 @@ def send_prompt(query):
     publish(query + "?")
 
 #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
-def model_response():
-    print("Ready\n")
-    publish("bot1_online")
-    while True:
-        try:
-            #history.predict(input=msg)
-            msg = consume()
-            if msg:
-                question = msg.decode("utf-8")
-                print(question)
-                if question == 'ping':
-                    response = 'pong'
-                    publish(response)
-                    #return response
-                elif question == 'restart':
-                    response = 'ok'
-                    publish(response)
-                    #return response
-                else:
-                    #response = agent_chain.run(question, callbacks=[handler])
-                    #response = agent.run([question])
-                    print("forwarding to AI")
-                    response = baby_agi({"objective": question}, callbacks=[handler])
-                    #history.chat_memory.add_ai_message(response)
-                    print(response)
-                    #publish(response)
-        except Exception as e:
-            traceback.print_exc()
-            if e == "KeyboardInterrupt":
-                publish("bot1_offline")
-                break
-            print( f"An exception occurred: {e}")
-            publish( f"An exception occurred: {e}")
-            
-        time.sleep(0.5)
+async def model_response():
+    # print("Ready\n")
+    # publish("bot1_online")
+    # while True:
+    try:
+        #history.predict(input=msg)
+        msg = consume()
+        schedule_msg = consume_schedule()
+        if msg:
+            question = msg.decode("utf-8")
+            print(question)
+            if question == 'ping':
+                response = 'pong'
+                publish(response)
+                #return response
+            elif question == 'restart':
+                response = 'ok'
+                publish(response)
+                #return response
+            else:
+                current_date_time = datetime.now() 
+                response = agent_chain.run(input=f"With the current date and time of {current_date_time} {question}? Answer using markdown", callbacks=[handler])
+                #response = agent.run([question])
+                #print("forwarding to AI")
+                #response = baby_agi({"objective": question}, callbacks=[handler])
+                #history.chat_memory.add_ai_message(response)
+                print(response)
+                #publish("How was that?")
+    except Exception as e:
+        traceback.print_exc()
+        # if e == "KeyboardInterrupt":
+        #     publish("bot1_offline")
+        #     break
+        # print( f"An exception occurred: {e}")
+        publish( f"An exception occurred: {e}")
+        
+    time.sleep(0.5)
 
 def publish(message):
     channel.basic_publish(exchange='',
@@ -96,109 +99,113 @@ def publish(message):
                       body=message)
     print(message)
 
+async def process_schedule():
+    #print("schedule")
+    #await publish("Checking my tasks...")
+    task = await scheduler_check_tasks(config.Todo_BotsTaskFolder,channel)
+    if not task:
+        publish("No tasks for me to do.")
+
 def consume():
     method, properties, body = notify_channel.basic_get(queue='message', auto_ack=True)
     return body
 
-# def chad_zero_shot_prompt():
-#     llm_chain = LLMChain(llm=OpenAI(temperature=0), prompt=prompt, callbacks=[handler])
-#     #agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+def consume_schedule():
+    method, properties, body = notify_channel.basic_get(queue='schedule', auto_ack=True)
+    if body:
+        print(f"schedule: {body}")
+    return body
 
-#     agent = AutoGPT.from_llm_and_tools(
-#         ai_name="AutoCHAD",
-#         ai_role="Assistant",
-#         tools=tools,
-#         llm=llm,
-#         memory=vectorstore.as_retriever(search_kwargs={"k": 8}),
-#         # human_in_the_loop=True, # Set to True if you want to add feedback at each step.
-#     )
-#     agent.chain.verbose = True
+def chad_zero_shot_prompt(llm, tools, vectorstore):
+   
+    prefix = """As an AI you are having a conversation with a laid back aussie, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+    suffix = """Begin!"
 
-#     prefix = """Have a conversation with a busy human, answering the following questions using markdown formating as best you can. You have access to the following tools:"""
-#     suffix = """Begin!"
+    {chat_history}
+    Question: {input}
+    {agent_scratchpad}"""
 
-#     {chat_history}
-#     Question: {input}
-#     {agent_scratchpad}"""
+    prompt = ZeroShotAgent.create_prompt(
+        tools, 
+        prefix=prefix, 
+        suffix=suffix, 
+        input_variables=["input", "chat_history", "agent_scratchpad"]
+    )
 
-#     prompt = ZeroShotAgent.create_prompt(
-#         tools, 
-#         prefix=prefix, 
-#         suffix=suffix, 
-#         input_variables=["input", "chat_history", "agent_scratchpad"]
-#     )
-
-#     agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
+    llm_chain = LLMChain(llm=OpenAI(temperature=0), prompt=prompt, callbacks=[handler])
+    memory = ConversationBufferMemory(memory_key="chat_history")
+    agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+    #agent.chain.verbose = True
+    agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
+    return agent_chain
 
 def action_chain(llm) -> LLMChain:
     todo_prompt = PromptTemplate.from_template(
-    "You are an assistant who breaks down an objective into short lists of tasks. Come up with a short todo list for this objective: {objective}"
+    "the current date is {datetime} and you are an assistant for an australian enginner who breaks down an objective into short lists of tasks. Come up with a short todo list for this objective: {objective}"
     )
     action_chain = LLMChain(llm=llm, prompt=todo_prompt)
     return action_chain
   
 
-def baby_chad_agi(vectorstore, tools):
-    prefix = """You are an AI who performs one task based on the following objective: {objective}. Take into account these previously completed tasks: {context}."""
-    suffix = """Question: {task}
-    {agent_scratchpad}"""
-    prompt = ZeroShotAgent.create_prompt(
-        tools,
-        prefix=prefix,
-        suffix=suffix,
-        input_variables=["objective", "task", "context", "agent_scratchpad"],
-    )
+# def baby_chad_agi(vectorstore, tools):
+#     prefix = """You are an AI who performs one task for an australian engineer based on the following objective: {objective}. Take into account these previously completed tasks: {context}."""
+#     suffix = """Question: {task}
+#     {agent_scratchpad}"""
+#     prompt = ZeroShotAgent.create_prompt(
+#         tools,
+#         prefix=prefix,
+#         suffix=suffix,
+#         input_variables=["objective", "task", "context", "agent_scratchpad"],
+#     )
 
-    llm = OpenAI(temperature=0)
-    llm_chain = LLMChain(llm=llm, prompt=prompt)
-    tool_names = [tool.name for tool in tools]
-    agent = ZeroShotAgent(llm_chain=llm_chain, allowed_tools=tool_names)
-    agent_executor = AgentExecutor.from_agent_and_tools(
-        agent=agent, tools=tools, verbose=True
-    )
+#     llm = OpenAI(temperature=0)
+#     llm_chain = LLMChain(llm=llm, prompt=prompt)
+#     tool_names = [tool.name for tool in tools]
+#     agent = ZeroShotAgent(llm_chain=llm_chain, allowed_tools=tool_names)
+#     agent_executor = AgentExecutor.from_agent_and_tools(
+#         agent=agent, tools=tools, verbose=True
+#     )
 
-    # Logging of LLMChains
-    verbose = True
-    # If None, will keep on going forever
-    #max_iterations: Optional[int] = 3
-    baby_agi = BabyAGI.from_llm(
-        llm=llm, vectorstore=vectorstore, verbose=verbose, task_execution_chain=agent_executor
-        #, max_iterations=max_iterations
-        #task_execution_chain=agent_executor, 
-    )
-    return baby_agi
+#     # Logging of LLMChains
+#     verbose = True
+#     # If None, will keep on going forever
+#     #max_iterations: Optional[int] = 3
+#     baby_agi = BabyAGI.from_llm(
+#         llm=llm, vectorstore=vectorstore, verbose=verbose, task_execution_chain=agent_executor
+#         #, max_iterations=max_iterations
+#         #task_execution_chain=agent_executor, 
+#     )
+#     return baby_agi
 
 
 def load_chads_tools(llm, action_chain) -> list():
     #toolkit = FileManagementToolkit()
     #toolkit.get_tools()
     #tools = load_tools(["wikipedia", "google-search", "llm-math", "requests_all", "human"], input_func=get_input, prompt_func=send_prompt, llm=llm)
-    tools = load_tools(["wikipedia", "google-search", "llm-math", "human"], input_func=get_input, prompt_func=send_prompt, llm=llm)
+    tools = load_tools(["wikipedia", "google-search", "human"], input_func=get_input, prompt_func=send_prompt, llm=llm)
  
-    chad_chain_tool = Tool(
-        name="TODO",
-        func=action_chain.run,
-        description="useful for when you need to come up with todo lists. Input: an objective to create a todo list for. Output: a todo list for that objective. Only use this for complex objectives. Please be very clear what the objective is!",
-    )
-    tools.append(chad_chain_tool)
+    # chad_chain_tool = Tool(
+    #     name="TODO",
+    #     func=action_chain.run,
+    #     description="useful for when you need to come up with todo lists. Input: an objective to create a todo list for. Output: a todo list for that objective. Only use this for complex objectives. Please be very clear what the objective is!",
+    # )
+    # tools.append(chad_chain_tool)
 
-    report_tool = Tool(
-        name="REPORT",
-        func=publish,
-        description="useful for sending results, info, status updates, and progress to the user. Input: the results, formated as markdown",
-    )
+    # schedule_tool = Tool(
+    #     name="SCHEDULE",
+    #     func=schedule,
+    #     description="useful for creating sheduling a prompt for later. Input: the prompt to be scheduled and date and time ",
+    # )
 
-    tools.append(report_tool)
-    #MSGetTaskFolders = MSGetTaskFolders()
-    #MSGetTasks = MSGetTasks()
-    #MSGetTaskDetail = MSGetTaskDetail()
+    # tools.append(schedule_tool)
+    
 
-    # tools.append(MSGetTaskFolders())
-    # tools.append(MSGetTasks())
-    # tools.append(MSGetTaskDetail())
-    # tools.append(MSSetTaskComplete())
-    # tools.append(MSCreateTask())
-    # tools.append(MSDeleteTask())
+    tools.append(MSGetTaskFolders())
+    tools.append(MSGetTasks())
+    tools.append(MSGetTaskDetail())
+    tools.append(MSSetTaskComplete())
+    tools.append(MSCreateTask())
+    tools.append(MSDeleteTask())
 
     # for tool in tools:
     #     print(str(tool) + "\n\n")
@@ -217,9 +224,11 @@ channel = connection.channel()
 
 message_channel = connection.channel()
 notify_channel = connection.channel()
+schedule_channel = connection.channel()
 
 message_channel.queue_declare(queue='message')
 notify_channel.queue_declare(queue='notify')
+schedule_channel.queue_declare(queue='schedule')
 
 # Define your embedding model
 
@@ -229,7 +238,7 @@ embeddings_model = OpenAIEmbeddings()
 embedding_size = 1536
 index = faiss.IndexFlatL2(embedding_size)
 vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
-#memory = ConversationBufferMemory(memory_key="chat_history")
+#
 handler = RabbitHandler(notify_channel)
 
 
@@ -240,4 +249,5 @@ tools = load_chads_tools(llm, baby_chad_chain)
 #agent, agent_executor = baby_chad_agent(llm, tools)
 
 #configure the baby chad ai
-baby_agi = baby_chad_agi(vectorstore, tools)
+#baby_agi = baby_chad_agi(vectorstore, tools)
+agent_chain = chad_zero_shot_prompt(llm, tools, vectorstore)

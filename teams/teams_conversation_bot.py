@@ -55,9 +55,11 @@ class TeamsConversationBot(TeamsActivityHandler):
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
     message_channel = connection.channel()
     notify_channel = connection.channel()
+    schedule_channel = connection.channel()
 
     message_channel.queue_declare(queue='message')
     notify_channel.queue_declare(queue='notify')
+    schedule_channel.queue_declare(queue='schedule')
     #ADAPTER = BotFrameworkAdapter
 
     def __init__(self, app_id: str, app_password: str, conversation_references: Dict[str, ConversationReference]):

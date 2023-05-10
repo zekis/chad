@@ -3,12 +3,13 @@ from dotenv import find_dotenv, load_dotenv
 #from flask import request
 import json
 import os
-import datetime
+from datetime import datetime, date, time, timezone, timedelta
 import re
+
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from typing import Any, Dict, Optional, Type
-
+import pika
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
 from langchain.tools import StructuredTool
@@ -58,11 +59,10 @@ def get_folders():
     todo =  account.tasks()
     folders = todo.list_folders()
 
-    return folders_to_string(folders)
+    return folders
 
 def get_tasks(folder_name):
     account = authenticate()
-    
     todo =  account.tasks()
     try:
         folder = todo.get_folder(folder_name=folder_name)
@@ -70,7 +70,7 @@ def get_tasks(folder_name):
         return "You must specify a valid folder name, use get_task_folders to get the list of folders"
     
     todo_list = folder.get_tasks()
-    return validate_response(tasks_to_string(todo_list, folder.name))
+    return todo_list
 
 def get_task_detail(folder_name, task_name):
     account = authenticate()
@@ -147,8 +147,10 @@ class MSGetTasks(BaseTool):
         try:
             print(text)
             data = _parse_input(text)
+            folder_name = data["folder_name"]
+            tasks = get_tasks(data["folder_name"])
             #print(f"folder_name: {data["folder_name"]}") 
-            return get_tasks(data["folder_name"])
+            return validate_response(tasks_to_string(tasks, folder_name))
         except Exception as e:
             return repr(e)
     
@@ -190,7 +192,7 @@ class MSGetTaskFolders(BaseTool):
     def _run(self, query, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         print(f"query: {query}") 
-        return get_folders()
+        return folders_to_string(get_folders())
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
@@ -239,9 +241,10 @@ class MSCreateTask(BaseTool):
     name = "create_task"
     description = """
     Useful for when you need to create a task.
-    To use the tool you must provide the following parameters ["folder_name", "task_name"].
+    To use the tool you must provide the following parameters ["folder_name", "task_name", "due_date].
     If not sure what folder to create the task in, use the Tasks folder.
-    Input should be a json string with two keys: "folder_name" and "task_name"
+    Input should be a json string with at least two keys: "folder_name" and "task_name"
+    due_date should be in the format "2023-02-28" for a python datetime.date object
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
@@ -252,6 +255,7 @@ class MSCreateTask(BaseTool):
             data = _parse_input(text)
             folder_name = data["folder_name"]
             task_name = data["task_name"]
+            due_date = data["due_date"]
             
             account = authenticate()
             todo = account.tasks()
@@ -259,6 +263,11 @@ class MSCreateTask(BaseTool):
             #get the folder and task
             folder = todo.get_folder(folder_name=folder_name)
             new_task = folder.new_task(task_name)
+            new_task.body = "Created by AutoCHAD"
+            if due_date:
+                date_format = '%Y-%m-%d'
+                new_task.due = datetime.strptime(due_date, date_format)
+            
             new_task.save()
 
             return get_task_detail(folder_name, task_name)
@@ -301,3 +310,42 @@ class MSDeleteTask(BaseTool):
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
         raise NotImplementedError("MSDeleteTask does not support async")
+
+def scheduler():
+    #call this every 5 minutes
+    #read the tasks from AutoCHAD folder
+    account = authenticate()
+
+    todo =  account.tasks()
+    folders = todo.list_folders()
+    
+    #if any are due now, then post to messages
+
+    return 
+
+async def scheduler_check_tasks(folder, channel):
+    account = authenticate()
+    todo =  account.tasks()
+    try:
+        folder = todo.get_folder(folder_name=folder)
+    except:
+        #Later I will call the AI to create the folder
+        channel.basic_publish(exchange='',routing_key='notify',body="Need to create the AutoCHAD task folder")
+        return "Need to create the AutoCHAD task folder"
+    
+    todo_list = folder.get_tasks()
+
+    for task in todo_list:
+        due_date = task.due
+        if not task.is_completed:
+            #print(f"{task.subject} - Due: {due_date}")
+
+            if due_date:
+                if datetime.now().astimezone() - due_date  > timedelta(hours=8):
+                    #found task due today send it to the message que
+                    channel.basic_publish(exchange='',routing_key='message',body=task.subject)
+                    #print(message)
+                    task.mark_completed()
+                    task.save()
+                    return task
+    return None
