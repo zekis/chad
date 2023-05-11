@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 from dotenv import find_dotenv, load_dotenv
+from datetime import datetime
 import os
 from pathlib import Path
 import json
@@ -95,11 +96,12 @@ class TeamsConversationBot(TeamsActivityHandler):
         ] = conversation_reference
 
     def init_bot(self, bot_name):
+        current_date_time = datetime.now().date()
         self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Bot {bot_name} Online"))
-        self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"Any important events in your memory for today?"))
+        #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"As an AI, Help me out by checking for any important events with dates to see if they are occuring today {current_date_time}?"))
+        #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"As an AI, You are keen to learn things about me, my family, likes and dislikes, so ask a random question using the human tool and save the response to memory"))
         
-        #self.message_channel.basic_publish(exchange='',routing_key='message',body="List the tasks in the AutoCHAD folder and use non task tools to action each one. Once complete mark the task as completed")
-        
+        #self.message_channel.basic_publish(exchange='',routing_key='message',body="List the tasks in the AutoCHAD folder and use non task tools to action each one. Once complete mark the task as completed") 
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the weather in ellebrook?")
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the latest news for Perth WA?")
 

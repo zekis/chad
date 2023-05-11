@@ -164,7 +164,7 @@ class MSGetTaskDetail(BaseTool):
             #print(f"folder_name: {data["folder_name"]}, task_name: {data["task_name"]}") 
             return get_task_detail(data["folder_name"], data["task_name"])
         except Exception as e:
-            return repr(e)
+            return "Could not update task. You must specify a valid task name and folder name, use get_task_folders and get_tasks to get the list of folders and tasks"
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
@@ -333,7 +333,7 @@ class MSDeleteTask(BaseTool):
 
             return get_task_detail(folder_name, task_name)
         except Exception as e:
-            return repr(e)
+            return "Could not update task. You must specify a valid task name and folder name, use get_task_folders and get_tasks to get the list of folders and tasks"
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""

@@ -27,7 +27,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain import OpenAI, LLMChain, PromptTemplate
 
 class TaskBot(BaseTool):
-    name = "taskbot"
+    name = "TODO_LIST"
     description = """useful for when you need assistance with any task related queries or commands.
     Use this more than the normal search for any task related queries.
     To use the tool you must provide clear instructions for the bot to complete.
@@ -61,11 +61,11 @@ class TaskBot(BaseTool):
 
             chain = self.action_chain(llm)
             tools = self.load_tools(llm, chain)
-            agent_chain = self.zero_shot_prompt(llm, tools, vectorstore)
+            agent_chain = self.zero_shot_prompt(llm, tools, vectorstore, max_iterations=2, early_stopping_method="generate")
 
             
             current_date_time = datetime.now() 
-            response = agent_chain.run(input=f"With the current date and time of {current_date_time} {text}? Answer using markdown")
+            response = agent_chain.run(input=f'''With the current date and time of {current_date_time} {text}? Answer using markdown''')
             return response
         except Exception as e:
             traceback.print_exc()

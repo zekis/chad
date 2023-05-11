@@ -33,9 +33,9 @@ load_dotenv(find_dotenv())
 MemoryFileName = os.getenv("MemoryFileName")
 
 class MemoryBotStore(BaseTool):
-    name = "memorybot_store"
-    description = """useful for when you need to store special dates, names, and places.
-    Examples include wedding aniversaries, birthdays, home and work addresses.
+    name = "MEMORY_STORE"
+    description = """useful for when you need to store personal preferences, favorite things, special dates, names, and places.
+    Examples include favorite foods, music, wedding aniversaries, birthdays, home and work addresses.
     Do not use this tool to create tasks, simply to store information for retieval later.
     Input should be a json string with three keys: "value_name", "value_type", "value"
     value_name should be the name of a place or persons name.
@@ -46,25 +46,31 @@ class MemoryBotStore(BaseTool):
         """Use the tool."""
         try:
             #print(text)
-            data = parse_input(text)
-            name = data.get("value_name")
+            #data = []
+            input = parse_input(text)
+            # data.append(input)
+            print(input)
+            #print(data)
+            #name = data[1].get("value_name")
             #print(data)
             # value_name = data["value_name"]
             # value = data["value"]
 
             # Merge the dicts
-            if os.path.isfile(MemoryFileName):
-                file = open(MemoryFileName, 'rb')
-                response = pickle.load(file)
-                merge = [data, response]
-                print(merge)
-            else:
-                merge = [data]
+            # if os.path.isfile(MemoryFileName):
+            #     file = open(MemoryFileName, 'rb')
+            #     while 1:
+            #         try:
+            #             data.append(pickle.load(file))
+            #         except EOFError:
+            #             break
+            #     print(data)
 
-            file = open(MemoryFileName, 'wb')
-            pickle.dump(merge, file)
-            file.close()
-            return name + " saved."
+            with open(MemoryFileName, 'ab+') as file:
+                pickle.dump(input, file)
+                #file.close()
+     
+            return "memory saved."
         except Exception as e:
             traceback.print_exc()
             return repr(e)
@@ -74,10 +80,9 @@ class MemoryBotStore(BaseTool):
         raise NotImplementedError("TaskBot does not support async")
 
 class MemoryBotRetrieve(BaseTool):
-    name = "memorybot_retrieve"
-    description = """useful for when you need to retrieve special dates, names, and places.
-    Examples include wedding aniversaries, birthdays, home and work addresses.
-    Be careful to always use double quotes for strings in the json string
+    name = "MEMORY_RETRIEVE_ALL"
+    description = """useful for when you need to retrieve all personal preferences, hobbies, favorite things, special dates, names, and places as a list of JSON.
+    Examples include favorite things, wedding aniversaries, birthdays, home and work addresses.
     """
     
 
@@ -87,12 +92,26 @@ class MemoryBotRetrieve(BaseTool):
             print(text)
             #data = parse_input(text)
             #name = data.get("value_name")
+            data = []
+            if os.path.isfile(MemoryFileName):
+                with open(MemoryFileName, 'rb') as file:
+                    try:
+                        while True:
+                            data.append(pickle.load(file))
+                    except EOFError:
+                        pass
+                        
+                print(data)
 
-            file = open(MemoryFileName, 'rb')
-            response = pickle.load(file)
-            #value = response.get(value_name)
-            file.close()
-            return response
+
+            # if os.path.isfile(MemoryFileName):
+            #     file = open(MemoryFileName, 'rb')
+            #     response = pickle.load(file)
+            #     #value = response.get(value_name)
+                
+                return data
+            else:
+                return []
         except Exception as e:
             traceback.print_exc()
             return repr(e)
