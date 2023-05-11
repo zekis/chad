@@ -13,13 +13,13 @@ import asyncio
 import threading
 
 async def task_scheduler():
-    publish("Let me check to see if I have any scheduled tasks due today.")
+    #publish("Let me check to see if I have any scheduled tasks due today.")
     while True:
         await process_schedule()
         await asyncio.sleep(config.Todo_PollingIntervalSeconds)
         
 async def ai_response():
-    publish("Hi There!")
+    publish("bot1_online")
     while True:
         #model_selector()
         await model_response()

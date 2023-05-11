@@ -10,6 +10,9 @@ import faiss
 
 from bots.rabbit_handler import RabbitHandler
 from bots.langchain_todo import TaskBot
+from bots.langchain_search import SearchBot
+from bots.langchain_memory import MemoryBotRetrieve, MemoryBotStore
+
 from bots.loaders.todo import scheduler_check_tasks
 
 from langchain.experimental import AutoGPT
@@ -73,7 +76,7 @@ async def model_response():
                 #return response
             else:
                 current_date_time = datetime.now() 
-                response = agent_chain.run(input=f"With the current date and time of {current_date_time} {question}? Answer using markdown", callbacks=[handler])
+                response = agent_chain.run(input=f"Please assist in answering the following question '''{question}'''? Answer using markdown", callbacks=[handler])
     except Exception as e:
         traceback.print_exc()
         publish( f"An exception occurred: {e}")
@@ -88,8 +91,9 @@ def publish(message):
 async def process_schedule():
     task = await scheduler_check_tasks(config.Todo_BotsTaskFolder,channel)
     if not task:
-        publish("No tasks for me to do.")
+        print("No tasks for me to do.")
     else:
+        publish("Looks like one of my tasks is due.")
         current_date_time = datetime.now() 
         response = agent_chain.run(input=f"With the current date and time of {current_date_time}, {task.subject}? Answer using markdown", callbacks=[handler])
         #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
@@ -110,7 +114,10 @@ def consume_schedule():
 
 def chad_zero_shot_prompt(llm, tools, vectorstore):
    
-    prefix = """As an AI you are having a conversation with a laid back aussie, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+    prefix = """As an AI, you are engaged in a conversation with a relaxed Aussie resident of Ellenbrook, Perth, Western Australia. 
+    Your task is to address the following inquiries and/or suggest supplementary information, as appropriate.
+    If the discussion leads to a recommendation or a piece of information that might need to be recalled at a specific date or time, please create a reminder using the Taskbot tool. 
+    You have the following resources at your disposal:"""
     suffix = """Begin!"
 
     {chat_history}
@@ -146,6 +153,9 @@ def load_chads_tools(llm, action_chain) -> list():
     #Todo Model
     #etc
     tools.append(TaskBot())
+    tools.append(SearchBot())
+    tools.append(MemoryBotStore())
+    tools.append(MemoryBotRetrieve())
 
     return tools
 

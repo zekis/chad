@@ -96,6 +96,8 @@ class TeamsConversationBot(TeamsActivityHandler):
 
     def init_bot(self, bot_name):
         self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Bot {bot_name} Online"))
+        self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"Any important events in your memory for today?"))
+        
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="List the tasks in the AutoCHAD folder and use non task tools to action each one. Once complete mark the task as completed")
         
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the weather in ellebrook?")

@@ -4,3 +4,4 @@ __pycache__
 /.venv
 bots/__pycache__
 o365_token.txt
+memory.txt

@@ -1,3 +1,4 @@
+import traceback
 import config
 from dotenv import find_dotenv, load_dotenv
 #from flask import request
@@ -8,6 +9,7 @@ import pika
 
 from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
+from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
 from bots.utils import validate_response, parse_input
@@ -268,30 +270,35 @@ class MSCreateTask(BaseTool):
         try:
             print(text)
             data = parse_input(text)
-            folder_name = data["folder_name"]
-            task_name = data["task_name"]
-            due_date = data["due_date"]
-            reminder_date = data["reminder_date"]
+            folder_name = data.get("folder_name")
+            task_name = data.get("task_name")
+            due_date = data.get("due_date")
+            reminder_date = data.get("reminder_date")
+            body = data.get("body")
             
             account = authenticate()
             todo = account.tasks()
 
             #get the folder and task
             folder = todo.get_folder(folder_name=folder_name)
-            new_task = folder.new_task(task_name)
-            new_task.body = "Created by AutoCHAD"
-            if due_date:
-                date_format = '%Y-%m-%d'
-                new_task.due = datetime.strptime(due_date, date_format)
-            if reminder_date:
-                date_format = '%Y-%m-%d'
-                new_task.reminder = datetime.strptime(reminder_date, date_format)
-            
-            new_task.save()
+            if folder:
+                new_task = folder.new_task(task_name)
+                new_task.body = "Created by AutoCHAD"
+                if due_date:
+                    #date_format = '%Y-%m-%d'
+                    new_task.due = parser.parse(due_date)
+                if reminder_date:
+                    #date_format = '%Y-%m-%d'
+                    new_task.reminder = parser.parse(reminder_date)
+                new_task.save()
+                return get_task_detail(folder_name, task_name)
+            else:
+                return "Could not create task. You must specify a valid folder name, use get_task_folders to get the list of folders"
 
-            return get_task_detail(folder_name, task_name)
         except Exception as e:
-            return repr(e)
+            traceback.print_exc()
+            #most likely error
+            return "Could not create task. You must specify a valid folder name, use get_task_folders to get the list of folders"
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
@@ -313,14 +320,16 @@ class MSDeleteTask(BaseTool):
             data = parse_input(text)
             folder_name = data["folder_name"]
             task_name = data["task_name"]
-            
+
             account = authenticate()
             todo = account.tasks()
 
             #get the folder and task
             folder = todo.get_folder(folder_name=folder_name)
-            new_task = folder.new_task(task_name)
-            new_task.delete()
+            query = todo.new_query("title").equals(task_name)
+            todo_task = folder.get_task(query)
+            
+            todo_task.delete()
 
             return get_task_detail(folder_name, task_name)
         except Exception as e:
@@ -330,3 +339,60 @@ class MSDeleteTask(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("MSDeleteTask does not support async")
 
+class MSUpdateTask(BaseTool):
+    name = "update_task"
+    description = """
+    Useful for when you need to update a task.
+    To use the tool you must provide the following parameters ["folder_name", "task_name", "due_date", "reminder_date", "body"].
+    If not sure what folder the is in, use the get_task_folders tool.
+    Input should be a json string with at least two keys: "folder_name" and "task_name"
+    due_date should be in the format "2023-02-28" for a python datetime.date object
+    reminder_date should be in the format "2023-02-28" for a python datetime.date object
+    Be careful to always use double quotes for strings in the json string
+    """
+    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
+    def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        try:
+            print(text)
+            data = parse_input(text)
+            # folder_name = data["folder_name"]
+            # task_name = data["task_name"]
+
+            folder_name = data.get("folder_name")
+            task_name = data.get("task_name")
+            due_date = data.get("due_date")
+            reminder_date = data.get("reminder_date")
+            body = data.get("body")
+
+            account = authenticate()
+            todo = account.tasks()
+
+            #get the folder and task
+            folder = todo.get_folder(folder_name=folder_name)
+            query = todo.new_query("title").equals(task_name)
+            existing_task = folder.get_task(query)
+
+            if folder:
+                existing_task = folder.get_task(task_name)
+                if body:
+                    existing_task.body = body
+                if due_date:
+                    #date_format = '%Y-%m-%d'
+                    existing_task.due = parser.parse(due_date)
+                if reminder_date:
+                    #date_format = '%Y-%m-%d'
+                    existing_task.reminder = parser.parse(due_date)
+                existing_task.save()
+                return get_task_detail(folder_name, task_name)
+            else:
+                return "Could not update task. You must specify a valid task name and folder name, use get_task_folders and get_tasks to get the list of folders and tasks"
+
+        except Exception as e:
+            traceback.print_exc()
+            #most likely error
+            return "Could not update task. You must specify a valid task name and folder name, use get_task_folders and get_tasks to get the list of folders and tasks"
+    
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("MSDeleteTask does not support async")

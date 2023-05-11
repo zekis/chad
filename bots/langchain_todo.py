@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
-from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder
+from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder, MSUpdateTask
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
@@ -110,6 +110,7 @@ class TaskBot(BaseTool):
         tools.append(MSCreateTask())
         tools.append(MSDeleteTask())
         tools.append(MSCreateTaskFolder())
+        tools.append(MSUpdateTask())
 
         return tools
 
