@@ -77,7 +77,7 @@ async def model_response():
                 #return response
             else:
                 current_date_time = datetime.now() 
-                response = agent_chain.run(input=f'''With the memory stored and with the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {question}? Answer using markdown''', callbacks=[handler])
+                response = agent_chain.run(input=f'''With the only the tools provided, memory stored and with the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {question}? Answer using markdown''', callbacks=[handler])
     except Exception as e:
         traceback.print_exc()
         publish( f"An exception occurred: {e}")

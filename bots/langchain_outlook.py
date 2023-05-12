@@ -26,10 +26,10 @@ from langchain.agents import ZeroShotAgent, AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain import OpenAI, LLMChain, PromptTemplate
 
-class TaskBot(BaseTool):
-    name = "TODO_LIST"
-    description = """useful for when you need assistance with any task related queries or commands.
-    Use this more than the normal search for any task related queries.
+class EmailBot(BaseTool):
+    name = "EMAIL_MANAGER"
+    description = """useful for when you need assistance with any task related emails.
+    Use this more than the normal search for any task related to emails.
     To use the tool you must provide clear instructions for the bot to complete.
     """
     
@@ -44,7 +44,7 @@ class TaskBot(BaseTool):
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("TaskBot does not support async")
+        raise NotImplementedError("EmailBot does not support async")
 
     #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
     def model_response(self, text):
@@ -96,15 +96,12 @@ class TaskBot(BaseTool):
 
     def load_tools(self, llm) -> list():
         tools = []
-        tools.append(MSGetTaskFolders())
-        tools.append(MSGetTasks())
-        tools.append(MSGetTaskDetail())
-        tools.append(MSSetTaskComplete())
-        tools.append(MSCreateTask())
-        tools.append(MSDeleteTask())
-        tools.append(MSCreateTaskFolder())
-        tools.append(MSUpdateTask())
-
+        tools.append(MSGetEmails())
+        #tools.append(MSGetEmailsSubject())
+        tools.append(MSDraftEmail())
+        tools.append(MSDraftEmailReply())
+        tools.append(MSDraftEmailForward())
+        
         return tools
 
 

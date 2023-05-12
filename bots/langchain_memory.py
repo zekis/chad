@@ -64,6 +64,7 @@ class MemoryBotStore(BaseTool):
 class MemoryBotRetrieve(BaseTool):
     name = "MEMORY_RETRIEVE_ALL"
     description = """useful for when you need to retrieve all personal preferences, hobbies, favorite things, special dates, names, and places as a list of JSON.
+    Do not use this tool to retrieve tasks but use this tool to retrieve a date or place needed to create a task.
     Examples include favorite things, wedding aniversaries, birthdays, home and work addresses.
     """
     

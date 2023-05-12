@@ -13,20 +13,10 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
-from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder
-
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
+from langchain import OpenAI, ConversationChain, LLMChain, PromptTemplate
+from langchain.memory import ConversationBufferWindowMemory
 from langchain.tools import BaseTool
-from langchain.tools import StructuredTool
-from langchain import OpenAI
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.docstore import InMemoryDocstore
-from langchain.agents import ZeroShotAgent, AgentExecutor
-from langchain.memory import ConversationBufferMemory
-from langchain import OpenAI, LLMChain, PromptTemplate
-from langchain.agents import load_tools, Tool
-from langchain.utilities import SerpAPIWrapper
 
 load_dotenv(find_dotenv())
 
@@ -38,14 +28,12 @@ class PlannerBot(BaseTool):
     Output: a todo list for that objective. 
     Please be very clear what the objective is!
     """
-    
-    search = SerpAPIWrapper()
 
     def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             print(text)
-            return model_response(text)
+            return self.model_response(text)
         except Exception as e:
             return repr(e)
     
@@ -60,12 +48,25 @@ class PlannerBot(BaseTool):
             load_dotenv(find_dotenv())
 
             # Define embedding model
-            llm = OpenAI(temperature=0)
-            messages = [
-                SystemMessage(content="You are a planner who is an expert at coming up with a todo list for a given objective."),
-                HumanMessage(content=f"Come up with a todo list for this objective: {text}")
-            ]
-            response = llm(messages)
+            #prompt = "You are a planner who is an expert at coming up with a todo list."
+            #template = "Come up with a todo list for this objective: {text}"
+
+            #chat = OpenAI(temperature=0)
+
+            template="""You are a planner who is an expert at coming up with a todo list for the following objective: {objective}
+            """
+            prompt = PromptTemplate(
+                input_variables=["objective"], 
+                template=template
+            )
+
+            chatgpt_chain = LLMChain(
+                llm=OpenAI(temperature=0), 
+                prompt=prompt, 
+                verbose=True, 
+            )
+
+            response = chatgpt_chain.run(objective=text)
             return response
         except Exception as e:
             traceback.print_exc()
