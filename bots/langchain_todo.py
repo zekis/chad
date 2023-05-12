@@ -61,7 +61,7 @@ class TaskBot(BaseTool):
 
             chain = self.action_chain(llm)
             tools = self.load_tools(llm, chain)
-            agent_chain = self.zero_shot_prompt(llm, tools, vectorstore, max_iterations=2, early_stopping_method="generate")
+            agent_chain = self.zero_shot_prompt(llm, tools, vectorstore)
 
             
             current_date_time = datetime.now() 

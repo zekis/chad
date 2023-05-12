@@ -45,26 +45,8 @@ class MemoryBotStore(BaseTool):
     def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            #print(text)
-            #data = []
             input = parse_input(text)
-            # data.append(input)
             print(input)
-            #print(data)
-            #name = data[1].get("value_name")
-            #print(data)
-            # value_name = data["value_name"]
-            # value = data["value"]
-
-            # Merge the dicts
-            # if os.path.isfile(MemoryFileName):
-            #     file = open(MemoryFileName, 'rb')
-            #     while 1:
-            #         try:
-            #             data.append(pickle.load(file))
-            #         except EOFError:
-            #             break
-            #     print(data)
 
             with open(MemoryFileName, 'ab+') as file:
                 pickle.dump(input, file)
@@ -90,8 +72,6 @@ class MemoryBotRetrieve(BaseTool):
         """Use the tool."""
         try:
             print(text)
-            #data = parse_input(text)
-            #name = data.get("value_name")
             data = []
             if os.path.isfile(MemoryFileName):
                 with open(MemoryFileName, 'rb') as file:
@@ -102,13 +82,6 @@ class MemoryBotRetrieve(BaseTool):
                         pass
                         
                 print(data)
-
-
-            # if os.path.isfile(MemoryFileName):
-            #     file = open(MemoryFileName, 'rb')
-            #     response = pickle.load(file)
-            #     #value = response.get(value_name)
-                
                 return data
             else:
                 return []

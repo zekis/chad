@@ -12,6 +12,7 @@ from bots.rabbit_handler import RabbitHandler
 from bots.langchain_todo import TaskBot
 from bots.langchain_search import SearchBot
 from bots.langchain_memory import MemoryBotRetrieve, MemoryBotStore
+from bots.langchain_planner import PlannerBot
 
 from bots.loaders.todo import scheduler_check_tasks
 
@@ -76,7 +77,7 @@ async def model_response():
                 #return response
             else:
                 current_date_time = datetime.now() 
-                response = agent_chain.run(input=f'''With the current date and time of {current_date_time}, Please assist in answering the following question: {question}? Answer using markdown''', callbacks=[handler])
+                response = agent_chain.run(input=f'''With the memory stored and with the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {question}? Answer using markdown''', callbacks=[handler])
     except Exception as e:
         traceback.print_exc()
         publish( f"An exception occurred: {e}")
@@ -95,7 +96,7 @@ async def process_schedule():
     else:
         publish("Looks like one of my tasks is due.")
         current_date_time = datetime.now() 
-        response = agent_chain.run(input=f'''With the current date and time of {current_date_time}, Please assist in answering the following question: {task.subject}? Answer using markdown''', callbacks=[handler])
+        response = agent_chain.run(input=f'''With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
         #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
         print(f"process schedule: {response}")
         task.body = task.body + "\n" + response
@@ -135,7 +136,7 @@ def chad_zero_shot_prompt(llm, tools, vectorstore):
     memory = ConversationBufferMemory(memory_key="chat_history")
     agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
     #agent.chain.verbose = True
-    agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory, max_iterations=2, early_stopping_method="generate") 
+    agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
     return agent_chain
 
 def action_chain(llm) -> LLMChain:
@@ -154,6 +155,7 @@ def load_chads_tools(llm, action_chain) -> list():
     #etc
     tools.append(MemoryBotStore())
     tools.append(MemoryBotRetrieve())
+    tools.append(PlannerBot())
     tools.append(TaskBot())
     tools.append(SearchBot())
 
