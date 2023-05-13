@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
-from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder, MSUpdateTask
+from bots.loaders.outlook import MSGetEmails
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
@@ -28,8 +28,8 @@ from langchain import OpenAI, LLMChain, PromptTemplate
 
 class EmailBot(BaseTool):
     name = "EMAIL_MANAGER"
-    description = """useful for when you need assistance with any task related emails.
-    Use this more than the normal search for any task related to emails.
+    description = """useful for when you need assistance with any email related questions.
+    Use this more than the normal search for emails questions.
     To use the tool you must provide clear instructions for the bot to complete.
     """
     
@@ -72,7 +72,7 @@ class EmailBot(BaseTool):
 
     def zero_shot_prompt(self, llm, tools, vectorstore):
     
-        prefix = """As an AI you are having a conversation with a laid back aussie, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+        prefix = f"""You are AI Assistant that likes reading and writing office emails for {config.OFFICE_USER}, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
         suffix = """Begin!"
 
         {chat_history}
@@ -98,9 +98,9 @@ class EmailBot(BaseTool):
         tools = []
         tools.append(MSGetEmails())
         #tools.append(MSGetEmailsSubject())
-        tools.append(MSDraftEmail())
-        tools.append(MSDraftEmailReply())
-        tools.append(MSDraftEmailForward())
+        # tools.append(MSDraftEmail())
+        # tools.append(MSDraftEmailReply())
+        # tools.append(MSDraftEmailForward())
         
         return tools
 

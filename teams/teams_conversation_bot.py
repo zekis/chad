@@ -77,7 +77,7 @@ class TeamsConversationBot(TeamsActivityHandler):
 
         message = random.choice(thinking_messages)
         response = self.message_channel.queue_declare('message', passive=True)
-        if response.method.message_count > 1:
+        if response.method.message_count > 0:
             self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Im already working on {response.method.message_count} messages"))
         
         #self.notify_channel.basic_publish(exchange='',routing_key='notify',body=message)

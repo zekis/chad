@@ -10,3 +10,4 @@ faiss-cpu
 tiktoken
 pika
 O365
+unstructured

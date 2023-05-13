@@ -13,6 +13,7 @@ from bots.langchain_todo import TaskBot
 from bots.langchain_search import SearchBot
 from bots.langchain_memory import MemoryBotRetrieve, MemoryBotStore
 from bots.langchain_planner import PlannerBot
+from bots.langchain_outlook import EmailBot
 
 from bots.loaders.todo import scheduler_check_tasks
 
@@ -96,7 +97,10 @@ async def process_schedule():
     else:
         publish("Looks like one of my tasks is due.")
         current_date_time = datetime.now() 
-        response = agent_chain.run(input=f'''With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
+        try:
+            response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
+        except Exception as e:
+            publish( f"An exception occurred: {e}")
         #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
         print(f"process schedule: {response}")
         task.body = task.body + "\n" + response
@@ -155,6 +159,7 @@ def load_chads_tools(llm, action_chain) -> list():
     #etc
     tools.append(MemoryBotStore())
     tools.append(MemoryBotRetrieve())
+    tools.append(EmailBot())
     tools.append(PlannerBot())
     tools.append(TaskBot())
     tools.append(SearchBot())

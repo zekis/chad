@@ -48,7 +48,7 @@ class MemoryBotStore(BaseTool):
             input = parse_input(text)
             print(input)
 
-            with open(MemoryFileName, 'ab+') as file:
+            with open(config.EMAIL_CACHE_FILE_NAME, 'ab+') as file:
                 pickle.dump(input, file)
                 #file.close()
      
@@ -74,8 +74,8 @@ class MemoryBotRetrieve(BaseTool):
         try:
             print(text)
             data = []
-            if os.path.isfile(MemoryFileName):
-                with open(MemoryFileName, 'rb') as file:
+            if os.path.isfile(config.EMAIL_CACHE_FILE_NAME):
+                with open(config.EMAIL_CACHE_FILE_NAME, 'rb') as file:
                     try:
                         while True:
                             data.append(pickle.load(file))
