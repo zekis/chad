@@ -126,6 +126,7 @@ class MSGetTasks(BaseTool):
     description = """useful for when you need to get a list of tasks in a task folder.
     Use this more than the normal search for any task related queries.
     To use the tool you must provide the following parameter ["folder_name"]
+    Input should be a json string with one key: "folder_name"
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema

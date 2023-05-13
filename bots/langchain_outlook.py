@@ -13,12 +13,17 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
-from bots.loaders.outlook import MSGetEmails
+from bots.rabbit_handler import RabbitHandler
+from bots.loaders.outlook import MSGetEmails, MSGetEmailDetail, MSCreateEmail, MSSearchEmails
+from bots.langchain_search import SearchBot
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
 from langchain.tools import StructuredTool
-from langchain import OpenAI
+
+#from langchain import OpenAI
+from langchain.chat_models import ChatOpenAI
+
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.docstore import InMemoryDocstore
@@ -27,10 +32,11 @@ from langchain.memory import ConversationBufferMemory
 from langchain import OpenAI, LLMChain, PromptTemplate
 
 class EmailBot(BaseTool):
-    name = "EMAIL_MANAGER"
-    description = """useful for when you need assistance with any email related questions.
+    name = "GET_EMAILS"
+    description = """useful for when you need to read or search for multiple emails or read email chains.
+    As an AI you cannot yet send emails only create drafts.
     Use this more than the normal search for emails questions.
-    To use the tool you must provide clear instructions for the bot to complete.
+    To use the tool you must provide step by step instructions.
     """
     
 
@@ -51,9 +57,13 @@ class EmailBot(BaseTool):
         try:
             #config
             load_dotenv(find_dotenv())
-
+            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            notify_channel = connection.channel()
+            notify_channel.queue_declare(queue='notify')
+            handler = RabbitHandler(notify_channel)
+            
             # Define embedding model
-            llm = OpenAI(temperature=0)
+            llm = ChatOpenAI(temperature=0)
             embeddings_model = OpenAIEmbeddings()
             embedding_size = 1536
             index = faiss.IndexFlatL2(embedding_size)
@@ -64,7 +74,7 @@ class EmailBot(BaseTool):
 
             
             current_date_time = datetime.now() 
-            response = agent_chain.run(input=f'''With the current date and time of {current_date_time} answer the following: {text}? Answer using markdown''')
+            response = agent_chain.run(input=f'''With the current date and time of {current_date_time} answer the following: {text}? Answer using markdown''', callbacks=[handler])
             return response
         except Exception as e:
             traceback.print_exc()
@@ -72,7 +82,7 @@ class EmailBot(BaseTool):
 
     def zero_shot_prompt(self, llm, tools, vectorstore):
     
-        prefix = f"""You are AI Assistant that likes reading and writing office emails for {config.OFFICE_USER}, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+        prefix = f"""As an witty assistant that likes reading and writing office emails for {config.OFFICE_USER}, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
         suffix = """Begin!"
 
         {chat_history}
@@ -85,8 +95,13 @@ class EmailBot(BaseTool):
             suffix=suffix, 
             input_variables=["input", "chat_history", "agent_scratchpad"]
         )
+        
+        # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        # notify_channel = connection.channel()
+        # notify_channel.queue_declare(queue='notify')
+        # handler = RabbitHandler(notify_channel)
 
-        llm_chain = LLMChain(llm=OpenAI(temperature=0), prompt=prompt)
+        llm_chain = LLMChain(llm=OpenAI(temperature=0, model_name="gpt-3.5-turbo-0301"), prompt=prompt)
         memory = ConversationBufferMemory(memory_key="chat_history")
         agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
         #agent.chain.verbose = True
@@ -96,7 +111,11 @@ class EmailBot(BaseTool):
 
     def load_tools(self, llm) -> list():
         tools = []
+        tools.append(SearchBot())
+        tools.append(MSSearchEmails())
         tools.append(MSGetEmails())
+        tools.append(MSGetEmailDetail())
+        tools.append(MSCreateEmail())
         #tools.append(MSGetEmailsSubject())
         # tools.append(MSDraftEmail())
         # tools.append(MSDraftEmailReply())

@@ -14,11 +14,15 @@ from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
 from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder
+from bots.rabbit_handler import RabbitHandler
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
 from langchain.tools import StructuredTool
-from langchain import OpenAI
+
+#from langchain import OpenAI
+from langchain.chat_models import ChatOpenAI
+
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.docstore import InMemoryDocstore
@@ -34,6 +38,7 @@ load_dotenv(find_dotenv())
 class SearchBot(BaseTool):
     name = "SEARCH"
     description = """useful for when you need to find information on the internet.
+    Do not use this tool for searching for tasks, memories, or emails.
     To use the tool you must provide clear instructions for the bot to complete.
     """
     

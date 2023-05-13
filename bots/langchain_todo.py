@@ -13,12 +13,16 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
+from bots.rabbit_handler import RabbitHandler
 from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder, MSUpdateTask
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
 from langchain.tools import StructuredTool
-from langchain import OpenAI
+
+#from langchain import OpenAI
+from langchain.chat_models import ChatOpenAI
+
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.docstore import InMemoryDocstore
@@ -27,8 +31,8 @@ from langchain.memory import ConversationBufferMemory
 from langchain import OpenAI, LLMChain, PromptTemplate
 
 class TaskBot(BaseTool):
-    name = "TODO_LIST"
-    description = """useful for when you need assistance with any task related queries or commands.
+    name = "ASSIGN"
+    description = """useful for when you need to assign or see tasks assigned to a human.
     Use this more than the normal search for any task related queries.
     To use the tool you must provide clear instructions for the bot to complete.
     """
@@ -51,9 +55,13 @@ class TaskBot(BaseTool):
         try:
             #config
             load_dotenv(find_dotenv())
+            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            notify_channel = connection.channel()
+            notify_channel.queue_declare(queue='notify')
+            handler = RabbitHandler(notify_channel)
 
             # Define embedding model
-            llm = OpenAI(temperature=0)
+            llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301")
             embeddings_model = OpenAIEmbeddings()
             embedding_size = 1536
             index = faiss.IndexFlatL2(embedding_size)
@@ -64,7 +72,7 @@ class TaskBot(BaseTool):
 
             
             current_date_time = datetime.now() 
-            response = agent_chain.run(input=f'''With the current date and time of {current_date_time} answer the following: {text}? Answer using markdown''')
+            response = agent_chain.run(input=f'''With the current date and time of {current_date_time} answer the following: {text}? Answer using markdown''', callbacks=[handler])
             return response
         except Exception as e:
             traceback.print_exc()
@@ -72,7 +80,7 @@ class TaskBot(BaseTool):
 
     def zero_shot_prompt(self, llm, tools, vectorstore):
     
-        prefix = """As an AI you are having a conversation with a laid back aussie, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+        prefix = """As an witty assistant having a conversation with a laid back aussie, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
         suffix = """Begin!"
 
         {chat_history}
@@ -86,7 +94,7 @@ class TaskBot(BaseTool):
             input_variables=["input", "chat_history", "agent_scratchpad"]
         )
 
-        llm_chain = LLMChain(llm=OpenAI(temperature=0), prompt=prompt)
+        llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301"), prompt=prompt)
         memory = ConversationBufferMemory(memory_key="chat_history")
         agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
         #agent.chain.verbose = True
@@ -103,7 +111,7 @@ class TaskBot(BaseTool):
         tools.append(MSCreateTask())
         tools.append(MSDeleteTask())
         tools.append(MSCreateTaskFolder())
-        tools.append(MSUpdateTask())
+        #tools.append(MSUpdateTask())
 
         return tools
 

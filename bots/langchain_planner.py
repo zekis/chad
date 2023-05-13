@@ -12,9 +12,12 @@ import faiss
 from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
+from bots.rabbit_handler import RabbitHandler
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
-from langchain import OpenAI, ConversationChain, LLMChain, PromptTemplate
+from langchain import ConversationChain, LLMChain, PromptTemplate
+from langchain.chat_models import ChatOpenAI
+
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.tools import BaseTool
 
@@ -50,10 +53,16 @@ class PlannerBot(BaseTool):
             # Define embedding model
             #prompt = "You are a planner who is an expert at coming up with a todo list."
             #template = "Come up with a todo list for this objective: {text}"
-
             #chat = OpenAI(temperature=0)
+            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            notify_channel = connection.channel()
+            notify_channel.queue_declare(queue='notify')
+            handler = RabbitHandler(notify_channel)
 
-            template="""You are a planner who is an expert at coming up with a todo list for the following objective: {objective}
+            # tool_details = ""
+            # for tool in tools:
+            #     tool_details = tool_details + tool.name + " "
+            template="""You are a planner who is an expert at coming up with a short todo lists of 1 to 3 tasks for the following objective: {objective}.
             """
             prompt = PromptTemplate(
                 input_variables=["objective"], 
@@ -61,12 +70,13 @@ class PlannerBot(BaseTool):
             )
 
             chatgpt_chain = LLMChain(
-                llm=OpenAI(temperature=0), 
+                llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301"), 
                 prompt=prompt, 
-                verbose=True, 
+                verbose=True,
+                callbacks=[handler]
             )
 
-            response = chatgpt_chain.run(objective=text)
+            response = chatgpt_chain.run(objective=text, callbacks=[handler])
             return response
         except Exception as e:
             traceback.print_exc()
