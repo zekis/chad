@@ -61,7 +61,7 @@ class TaskBot(BaseTool):
             handler = RabbitHandler(notify_channel)
 
             # Define embedding model
-            llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301")
+            llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
             embeddings_model = OpenAIEmbeddings()
             embedding_size = 1536
             index = faiss.IndexFlatL2(embedding_size)
@@ -80,7 +80,7 @@ class TaskBot(BaseTool):
 
     def zero_shot_prompt(self, llm, tools, vectorstore):
     
-        prefix = """As an witty assistant having a conversation with a laid back aussie, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+        prefix = """As a witty chad bro having a conversation with a laid back aussie, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
         suffix = """Begin!"
 
         {chat_history}
@@ -94,7 +94,7 @@ class TaskBot(BaseTool):
             input_variables=["input", "chat_history", "agent_scratchpad"]
         )
 
-        llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301"), prompt=prompt)
+        llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt)
         memory = ConversationBufferMemory(memory_key="chat_history")
         agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
         #agent.chain.verbose = True

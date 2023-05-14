@@ -24,19 +24,15 @@ from langchain.tools import BaseTool
 load_dotenv(find_dotenv())
 
 
-class PlannerBot(BaseTool):
-    name = "PLANNER"
-    description = """useful for when you need to breakdown objectives into a list of tasks. 
-    Input: an objective to create a todo list for. 
-    Output: a todo list for that objective. 
-    Please be very clear what the objective is!
+class ReviewerBot(BaseTool):
+    name = "REVIEW"
+    description = """useful for when you want to review your peformance reaching the objective.  
     """
 
     def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             print(text)
-
             connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
             notify_channel = connection.channel()
             notify_channel.queue_declare(queue='notify')
@@ -50,7 +46,7 @@ class PlannerBot(BaseTool):
         raise NotImplementedError("PlannerBot does not support async")
 
     #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
-    def model_response(self, text, tools, notify_channel):
+    def model_response(self, text, response, notify_channel):
         try:
             #config
             load_dotenv(find_dotenv())
@@ -59,17 +55,17 @@ class PlannerBot(BaseTool):
             #prompt = "You are a planner who is an expert at coming up with a todo list."
             #template = "Come up with a todo list for this objective: {text}"
             #chat = OpenAI(temperature=0)
-           
+            #connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            #notify_channel = connection.channel()
+            #notify_channel.queue_declare(queue='notify')
             handler = RabbitHandler(notify_channel)
 
-            tool_details = ""
-            for tool in tools:
-                tool_details = tool_details + tool.name + ", "
-            template="""You are a planner bro who first reviews the objective to see if it even needs a todo list. if it does, come up with a short todo lists of 1 to 3 tasks for the following objective: {objective}.
-            You have the following tools available {tools}
+            template="""You are a performance reviewer bro who reviews the final response to see if it met the objective and see if the task should be redone.
+            Objective: {objective}
+            Response: {response}
             """
             prompt = PromptTemplate(
-                input_variables=["objective", "tools"], 
+                input_variables=["objective", "response"], 
                 template=template
             )
 
@@ -80,7 +76,7 @@ class PlannerBot(BaseTool):
                 callbacks=[handler]
             )
 
-            response = chatgpt_chain.run(objective=text, tools=tool_details, callbacks=[handler])
+            response = chatgpt_chain.run(objective=text, response=response, callbacks=[handler])
             return response
         except Exception as e:
             traceback.print_exc()

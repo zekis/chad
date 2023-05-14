@@ -32,8 +32,8 @@ from langchain.memory import ConversationBufferMemory
 from langchain import OpenAI, LLMChain, PromptTemplate
 
 class EmailBot(BaseTool):
-    name = "GET_EMAILS"
-    description = """useful for when you need to read or search for multiple emails or read email chains.
+    name = "EMAILER"
+    description = """useful for when your bro needs to read or search for multiple emails, read email chains, or create drafts.
     As an AI you cannot yet send emails only create drafts.
     Use this more than the normal search for emails questions.
     To use the tool you must provide step by step instructions.
@@ -82,7 +82,7 @@ class EmailBot(BaseTool):
 
     def zero_shot_prompt(self, llm, tools, vectorstore):
     
-        prefix = f"""As an witty assistant that likes reading and writing office emails for {config.OFFICE_USER}, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+        prefix = f"""As an witty assistant bro that likes reading and writing office emails for {config.OFFICE_USER}, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
         suffix = """Begin!"
 
         {chat_history}
@@ -101,7 +101,7 @@ class EmailBot(BaseTool):
         # notify_channel.queue_declare(queue='notify')
         # handler = RabbitHandler(notify_channel)
 
-        llm_chain = LLMChain(llm=OpenAI(temperature=0, model_name="gpt-3.5-turbo-0301"), prompt=prompt)
+        llm_chain = LLMChain(llm=OpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt)
         memory = ConversationBufferMemory(memory_key="chat_history")
         agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
         #agent.chain.verbose = True

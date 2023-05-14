@@ -14,6 +14,7 @@ from bots.langchain_search import SearchBot
 from bots.langchain_memory import MemoryBotRetrieve, MemoryBotStore
 from bots.langchain_planner import PlannerBot
 from bots.langchain_outlook import EmailBot
+from bots.langchain_peformance import ReviewerBot
 from bots.loaders.outlook import MSCreateEmail
 
 from bots.loaders.todo import scheduler_check_tasks
@@ -81,9 +82,12 @@ async def model_response():
             else:
                 current_date_time = datetime.now() 
                 
-                plan = plannerBot.model_response(question)
+                plan = plannerBot.model_response(question, tools, notify_channel)
                 publish(plan)
                 response = agent_chain.run(input=f'''With the only the tools provided, memory stored and with the current date and time of {current_date_time}, Please assist in completeing the following steps: {plan} to reach the objective: {question}? Answer using markdown''', callbacks=[handler])
+
+                review = reviewerBot.model_response(question, response, notify_channel)
+                publish(review)
     except Exception as e:
         traceback.print_exc()
         publish( f"An exception occurred: {e}")
@@ -124,7 +128,7 @@ def consume_schedule():
 
 def chad_zero_shot_prompt(llm, tools, vectorstore):
    
-    prefix = """As an witty assistant, you're having a chat with a laid-back Aussie who lives in Ellenbrook, Perth, Western Australia. 
+    prefix = """As an chilled out bro, you're having a chat with a laid-back Aussie who lives in Ellenbrook, Perth, Western Australia. 
                 Your role is to guide the conversation, addressing the queries raised and providing additional relevant information when it's suitable.
                 In the course of the conversation, if any advice or information emerges that may need to be recalled at a specific date or time, utilize the memory tool to create a reminder. 
                 Remember, your primary role is to facilitate and guide, making the most of the tools at your disposal to assist in the conversation."""
@@ -141,7 +145,7 @@ def chad_zero_shot_prompt(llm, tools, vectorstore):
         input_variables=["input", "chat_history", "agent_scratchpad"]
     )
 
-    llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301"), prompt=prompt, callbacks=[handler])
+    llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt, callbacks=[handler])
     memory = ConversationBufferMemory(memory_key="chat_history")
     agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
     #agent.chain.verbose = True
@@ -155,16 +159,17 @@ def load_chads_tools(llm) -> list():
     #Email Model
     #Todo Model
     #etc
+    tools.append(SearchBot())
     tools.append(MemoryBotStore())
     tools.append(MemoryBotRetrieve())
 
     #added the ability for the master to email directly
-    tools.append(MSCreateEmail())
+    #tools.append(MSCreateEmail())
     tools.append(EmailBot())
 
     #tools.append(PlannerBot())
     tools.append(TaskBot())
-    tools.append(SearchBot())
+    
 
 
     return tools
@@ -187,10 +192,12 @@ notify_channel.queue_declare(queue='notify')
 schedule_channel.queue_declare(queue='schedule')
 
 # Define your embedding model
-llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301")
+llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
 
 #planner bot
 plannerBot = PlannerBot()
+#reviewer bot
+reviewerBot = ReviewerBot()
 
 embeddings_model = OpenAIEmbeddings()
 embedding_size = 1536

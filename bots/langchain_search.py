@@ -37,7 +37,7 @@ load_dotenv(find_dotenv())
 
 class SearchBot(BaseTool):
     name = "SEARCH"
-    description = """useful for when you need to find information on the internet.
+    description = """useful for when you need to find information on the internet bro.
     Do not use this tool for searching for tasks, memories, or emails.
     To use the tool you must provide clear instructions for the bot to complete.
     """
