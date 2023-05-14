@@ -12,7 +12,7 @@ import faiss
 from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
-from bots.rabbit_handler import RabbitHandler
+from bots.rabbit_feedback_handler import RabbitFeedbackHandler
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain import ConversationChain, LLMChain, PromptTemplate
@@ -46,7 +46,7 @@ class ReviewerBot(BaseTool):
         raise NotImplementedError("PlannerBot does not support async")
 
     #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
-    def model_response(self, text, response, notify_channel):
+    def model_response(self, text, response, bot_channel, inital_prompt):
         try:
             #config
             load_dotenv(find_dotenv())
@@ -58,14 +58,16 @@ class ReviewerBot(BaseTool):
             #connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
             #notify_channel = connection.channel()
             #notify_channel.queue_declare(queue='notify')
-            handler = RabbitHandler(notify_channel)
+            handler = RabbitFeedbackHandler(bot_channel)
 
-            template="""You are a performance reviewer bro who reviews the final response to see if it met the objective and see if the task should be redone.
+            template="""You are a performance reviewer bro who reviews the question, prompts and final response to see if it met the objective.
+            You are able to rate the prompt a score of 1 to 10 and provide an improved prompt.
+            The prompt used: {inital_prompt}
             Objective: {objective}
             Response: {response}
             """
             prompt = PromptTemplate(
-                input_variables=["objective", "response"], 
+                input_variables=["objective", "response", "inital_prompt"], 
                 template=template
             )
 
@@ -76,7 +78,7 @@ class ReviewerBot(BaseTool):
                 callbacks=[handler]
             )
 
-            response = chatgpt_chain.run(objective=text, response=response, callbacks=[handler])
+            response = chatgpt_chain.run(objective=text, response=response, inital_prompt=inital_prompt, callbacks=[handler])
             return response
         except Exception as e:
             traceback.print_exc()

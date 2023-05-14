@@ -12,7 +12,7 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
-from bots.utils import validate_response, parse_input
+from bots.utils import validate_response, parse_input, sanitize_subject
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
@@ -136,8 +136,11 @@ class MSGetTasks(BaseTool):
         try:
             print(text)
             data = parse_input(text)
-            folder_name = data["folder_name"]
+            folder_name = data.get("folder_name")
+            folder_name = sanitize_subject(folder_name)
+
             tasks = get_tasks(folder_name)
+
             #print(f"folder_name: {data["folder_name"]}") 
             return validate_response(tasks_to_string(tasks, folder_name))
         except Exception as e:
@@ -163,7 +166,7 @@ class MSGetTaskDetail(BaseTool):
             print(text)
             data = parse_input(text)
             #print(f"folder_name: {data["folder_name"]}, task_name: {data["task_name"]}") 
-            return get_task_detail(data["folder_name"], data["task_name"])
+            return get_task_detail(data.get("folder_name"), data.get("task_name"))
         except Exception as e:
             return "Could not update task. You must specify a valid task name and folder name, use get_task_folders and get_tasks to get the list of folders and tasks"
     
@@ -200,8 +203,9 @@ class MSCreateTaskFolder(BaseTool):
         try:
             print(text)
             data = parse_input(text)
-            folder_name = data["folder_name"]
-            tasks = get_tasks(data["folder_name"])
+            folder_name = data.get("folder_name")
+            folder_name = sanitize_subject(folder_name)
+            #tasks = get_tasks(data["folder_name"])
             account = authenticate()
             todo =  account.tasks()
             new_folder = todo.new_folder(folder_name)
@@ -229,8 +233,10 @@ class MSSetTaskComplete(BaseTool):
         try:
             print(text)
             data = parse_input(text)
-            folder_name = data["folder_name"]
-            task_name = data["task_name"]
+            folder_name = data.get("folder_name")
+            folder_name = sanitize_subject(folder_name)
+            task_name = data.get("task_name")
+            task_name = sanitize_subject(task_name)
             
             account = authenticate()
             todo = account.tasks()
@@ -272,7 +278,9 @@ class MSCreateTask(BaseTool):
             print(text)
             data = parse_input(text)
             folder_name = data.get("folder_name")
+            folder_name = sanitize_subject(folder_name)
             task_name = data.get("task_name")
+            task_name = sanitize_subject(task_name)
             due_date = data.get("due_date")
             reminder_date = data.get("reminder_date")
             body = data.get("body")
@@ -319,8 +327,10 @@ class MSDeleteTask(BaseTool):
         try:
             print(text)
             data = parse_input(text)
-            folder_name = data["folder_name"]
-            task_name = data["task_name"]
+            folder_name = data.get("folder_name")
+            folder_name = sanitize_subject(folder_name)
+            task_name = data.get("task_name")
+            task_name = sanitize_subject(task_name)
 
             account = authenticate()
             todo = account.tasks()
@@ -361,7 +371,11 @@ class MSUpdateTask(BaseTool):
             # task_name = data["task_name"]
 
             folder_name = data.get("folder_name")
+            folder_name = sanitize_subject(folder_name)
+
             task_name = data.get("task_name")
+            task_name = sanitize_subject(task_name)
+            
             due_date = data.get("due_date")
             reminder_date = data.get("reminder_date")
             body = data.get("body")

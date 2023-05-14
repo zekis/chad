@@ -8,8 +8,8 @@ from langchain.schema import AgentAction, AgentFinish, LLMResult
 import pika
 import re
 
-
-class RabbitHandler(BaseCallbackHandler):
+#similar to a normal handler except it feeds the messages back to the bot
+class RabbitFeedbackHandler(BaseCallbackHandler):
 
     message_channel = pika.BlockingConnection()
 
@@ -29,7 +29,7 @@ class RabbitHandler(BaseCallbackHandler):
             thought = match.group(1)
             #print("Thought:", thought)
             #"""Run on agent action."""
-            self.message_channel.basic_publish(exchange='',routing_key='notify',body=thought)
+            self.message_channel.basic_publish(exchange='',routing_key='message',body=thought)
             #print_text(action.log, color=color if color else self.color)
     
     def on_agent_finish(

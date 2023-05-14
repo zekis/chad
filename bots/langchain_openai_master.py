@@ -23,6 +23,8 @@ from langchain.experimental import AutoGPT
 from langchain.experimental import BabyAGI
 from langchain.chat_models import ChatOpenAI
 
+from langchain.agents import initialize_agent
+from langchain.agents import AgentType
 from langchain.agents import load_tools, Tool
 from langchain.agents import ZeroShotAgent, AgentExecutor
 from langchain.memory import ConversationBufferMemory
@@ -59,6 +61,34 @@ def get_input():
         time.sleep(0.5)
     return question
 
+#callbacks
+def get_plan_input(question):
+    timeout = time.time() + 60*1   # 1 minutes from now
+    #Calculate plan
+    plan = plannerBot.model_response(question, tools, notify_channel)
+    publish(plan)
+    publish("Would you like to make any changes to the plan above? otherwise type 'continue' to proceed or 'stop' to cancel.")
+    #loop until human happy with plan
+    contents = []
+    while True:
+        msg = consume()
+        if msg:
+            question = msg.decode("utf-8")
+            if "continue" == question.lower():
+                return plan
+            if "stop" == question.lower():
+                return "stop"
+            else:
+                new_prompt = f"Update the following plan: {plan} using the following input: {question}"
+                plan = plannerBot.model_response(new_prompt, tools, notify_channel)
+                publish(plan)
+                publish("Would you like to make any changes to the plan above? otherwise type 'continue' to proceed")
+                timeout = time.time() + 60*1
+        if time.time() > timeout:
+            return plan
+        time.sleep(0.5)
+    return plan
+
 def send_prompt(query):
     publish(query + "?")
 
@@ -82,12 +112,17 @@ async def model_response():
             else:
                 current_date_time = datetime.now() 
                 
-                plan = plannerBot.model_response(question, tools, notify_channel)
-                publish(plan)
-                response = agent_chain.run(input=f'''With the only the tools provided, memory stored and with the current date and time of {current_date_time}, Please assist in completeing the following steps: {plan} to reach the objective: {question}? Answer using markdown''', callbacks=[handler])
+                revised_plan = get_plan_input(question)
+                if revised_plan != 'stop':
 
-                review = reviewerBot.model_response(question, response, notify_channel)
-                publish(review)
+                    inital_prompt = f'''With the only the tools provided, 
+                    memory stored and with the current date and time of {current_date_time},
+                    Please assist using the follwing steps as a guide: {revised_plan} to reach the objective: {question}?
+                    Answer using markdown'''
+                    response = agent_chain.run(input=inital_prompt, callbacks=[handler])
+
+                    review = reviewerBot.model_response(question, response, message_channel, question)
+                    publish(review)
     except Exception as e:
         traceback.print_exc()
         publish( f"An exception occurred: {e}")
@@ -147,9 +182,10 @@ def chad_zero_shot_prompt(llm, tools, vectorstore):
 
     llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt, callbacks=[handler])
     memory = ConversationBufferMemory(memory_key="chat_history")
-    agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+    #agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+    agent_chain = initialize_agent(tools, llm, agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
     #agent.chain.verbose = True
-    agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
+    #agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
     return agent_chain
 
 def load_chads_tools(llm) -> list():

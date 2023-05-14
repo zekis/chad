@@ -19,4 +19,19 @@ def validate_response(string):
 
 def parse_input(text: str) -> Dict[str, Any]:
     """Parse the json string into a dict."""
-    return json.loads(text)
+
+    clean_string = text.replace("```","")
+
+    return json.loads(clean_string)
+
+def sanitize_subject(subject, max_length=150):
+    # Replace slashes with hyphens
+    subject = subject.replace("/", "-").replace("\\", "-")
+    
+    # Remove or replace other special characters
+    subject = re.sub(r"[^a-zA-Z0-9\-_]+", "_", subject)
+    
+    # Truncate the subject to the specified length
+    subject = subject[:max_length]
+    
+    return subject

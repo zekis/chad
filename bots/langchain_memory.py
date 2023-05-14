@@ -38,19 +38,30 @@ MemoryFileName = os.getenv("MemoryFileName")
 
 class MemoryBotStore(BaseTool):
     name = "MEMORY_STORE"
-    description = """useful for when you need to store personal preferences, favorite things, special dates, names, and places.
+    description = """useful for when you need to store personal preferences, favorite things, names, and places.
     Examples include favorite foods, music, wedding aniversaries, birthdays, home and work addresses.
-    Do not use this tool to create tasks, simply to store information for retieval later.
+    DO NOT USER this tool to create tasks.
     Input should be a json string with three keys: "value_name", "value_type", "value"
     value_name should be the name of a place or persons name.
     Be careful to always use double quotes for strings in the json string
     """
 
-    def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, text: str = None, value_name: str = None, value_type: str = None, value: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            input = parse_input(text)
-            print(input)
+            if text:
+                input = parse_input(text)
+            if value_name: 
+                print(value_name)
+            if value_type:
+                print(value_name)
+                if value_type.lower() == "task":
+                    return "Do not store tasks in memory, use the ASSIGN tool instead"
+            if value:
+                print(value)
+                input = '{"value_name": "' + value_name + '", "value_type": "' + value_type + '", "value": "' + value + '"}'
+            else:
+                print(input)
 
             with open(config.EMAIL_CACHE_FILE_NAME, 'ab+') as file:
                 pickle.dump(input, file)

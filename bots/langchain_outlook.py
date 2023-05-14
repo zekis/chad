@@ -34,6 +34,7 @@ from langchain import OpenAI, LLMChain, PromptTemplate
 class EmailBot(BaseTool):
     name = "EMAILER"
     description = """useful for when your bro needs to read or search for multiple emails, read email chains, or create drafts.
+    Only use this tool if specifically asked to do so.
     As an AI you cannot yet send emails only create drafts.
     Use this more than the normal search for emails questions.
     To use the tool you must provide step by step instructions.

@@ -97,8 +97,8 @@ class TeamsConversationBot(TeamsActivityHandler):
 
     def init_bot(self, bot_name):
         current_date_time = datetime.now().date()
-        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Hey Bro!"))
-        #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"As an AI, Help me out by checking for any important events with dates to see if they are occuring today {current_date_time}?"))
+        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Hey Bro! Its my first day, lets get to know each other..."))
+        self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"Establish a personal connection with your human by asking for their name and using it in future interactions. This will help build trust and rapport between you and your human."))
         #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"As an AI, You are keen to learn things about me, my family, likes and dislikes, so ask a random question using the human tool and save the response to memory"))
         
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="List the tasks in the AutoCHAD folder and use non task tools to action each one. Once complete mark the task as completed") 

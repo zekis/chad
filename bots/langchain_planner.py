@@ -64,8 +64,9 @@ class PlannerBot(BaseTool):
 
             tool_details = ""
             for tool in tools:
-                tool_details = tool_details + tool.name + ", "
-            template="""You are a planner bro who first reviews the objective to see if it even needs a todo list. if it does, come up with a short todo lists of 1 to 3 tasks for the following objective: {objective}.
+                tool_details = tool_details + "\nName: " + tool.name + "\nDescription: " + tool.description + "\n"
+            template="""You are a planner bro who can identify the right tool for the objective. If more then one tool is required, come up with a short todo lists of 1 to 3 tasks. 
+            The objective is: {objective}.
             You have the following tools available {tools}
             """
             prompt = PromptTemplate(
