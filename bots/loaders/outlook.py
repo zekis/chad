@@ -55,19 +55,19 @@ def authenticate():
     account.authenticate()
     return account
 
+# This function returns a summary of the given email using OpenAI's GPT-3 API.
 def get_email_summary(email):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"Please summarise the the following email: {email}"
+    print(f"Function Name: get_email_summary | Query: {query}")
     return chat([HumanMessage(content=query)]).content
 
 def reply_to_email_summary(summary):
-    #summary = get_email_summary(email)
-
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this email summary: {summary}, please create a reasonable email response from the perspective of {config.OFFICE_USER}.
     Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end."""
     email_response = chat([HumanMessage(content=query)]).content
-    print(email_response)
+    print(f"Function Name: reply_to_email_summary | Query: {query}")
     return email_response
 
 def get_email_chain(ConversationID):
@@ -76,9 +76,7 @@ def get_email_chain(ConversationID):
     inbox = mailbox.inbox_folder()
 
     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
-    
-    #Get emails from API
-    #emails = inbox.get_messages(limit=4, query=query)
+    print(f"Function Name: get_email_chain | Query: {query}")
     emails = inbox.get_messages(limit=5,query=query)
     
     count = 0
@@ -87,43 +85,23 @@ def get_email_chain(ConversationID):
         for email in emails:
             count = count + 1
             final_response = final_response + format_email_summary_only(email)
-            #final_response = final_response + get_email_summary(email_html)
         return final_response
     return None
 
+# This function takes an `ObjectID` as input and returns the email associated with that ID.
 def get_email(ObjectID):
-    #returns a search for a Vector DB with todays emails
+    print(f"Function Name: get_email | ObjectID: {ObjectID}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
-
+    # Fetches a single email matching the given `ObjectID` from the inbox.
     email = inbox.get_message(ObjectID)
     final_response = format_email(email)        
     return final_response
-    
 
-def search_emails(search_query):
-    #returns a search for a Vector DB with todays emails
-    account = authenticate()
-    mailbox = account.mailbox()
-    inbox = mailbox.inbox_folder()
-
-    query = inbox.new_query().search(search_query)
-
-    emails = inbox.get_messages(limit=5, query=query)
-    
-    count = 0   
-    if emails:
-        final_response = []
-        for email in emails:
-            email.conversation_id
-            final_response.append(format_email_header(email))
-            
-        return final_response
-    return None
 
 def search_emails_return_unique_conv(search_query):
-    # Returns a search for a Vector DB with todays emails
+    print(f"Function Name: search_emails_return_unique_conv | Search Query: {search_query}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
@@ -144,20 +122,13 @@ def search_emails_return_unique_conv(search_query):
     return None
 
 def create_email_reply(ConversationID, body):
-    #returns a search for a Vector DB with todays emails
+    print(f"Function Name: create_email_reply | Conversation ID: {ConversationID} | Body: {body}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
 
-    # today = datetime.now()
-    # yesterday = today - timedelta(days=1)
-
-    # start_date = datetime(yesterday.year, yesterday.month, yesterday.day)
-    # end_date = datetime.now()
-
     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
     
-    #Get emails from API
     emails = list(inbox.get_messages(limit=1, query=query))
     email = emails[0]
 
@@ -170,19 +141,13 @@ def create_email_reply(ConversationID, body):
     return "Email Reply Created"
 
 def create_email_forward(ConversationID, recipient, body):
+    print(f"Function Name: create_email_forward | Conversation ID: {ConversationID} | Recipient: {recipient} | Body: {body}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
 
-    # today = datetime.now()
-    # yesterday = today - timedelta(days=1)
-
-    # start_date = datetime(yesterday.year, yesterday.month, yesterday.day)
-    # end_date = datetime.now()
-
     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
-    
-    #Get emails from API
+
     emails = list(inbox.get_messages(limit=1, query=query))
     email = emails[0]
     
@@ -194,12 +159,12 @@ def create_email_forward(ConversationID, recipient, body):
     reply_msg.to.add(recipient)
     reply_msg.body = body
     
-
     reply_msg.save_draft()
     return "Forward Email Created"
 
 
 def draft_email(recipient, subject, body):
+    print(f"Function Name: draft_email | Recipient: {recipient} | Subject: {subject}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
@@ -214,44 +179,16 @@ def draft_email(recipient, subject, body):
     else:
         return "email must contain a body. Perhaps work out what content you need to send first"
 
-def read_emails_to_loader(file):
-    #Load the emails from file
-    loader = UnstructuredHTMLLoader(file)
-    data = loader.load()
-    if data:
-        # Split the text file
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-        docs = text_splitter.split_documents(data)
-        
-        # Create vector DB
-        db = FAISS.from_documents(docs, embeddings)
-        print("FAISS object:", db)
-        return db
-    return None
-    
-
-
-
 def clean_html(html):
     soup = BeautifulSoup(html, 'html.parser')
-
     # Remove unnecessary tags
     for tag in soup(['style', 'script', 'img']):
         tag.decompose()
-
-    # Remove multiple spaces, new lines, and tabs
-    #clean_text = re.sub(r'\s+', ' ', soup.get_text())
     clean_text = soup.get_text()
-
-    # Remove leading and trailing spaces
-    #clean_text = clean_text.strip()
-
     return clean_text
 
 def format_email(email, include_summary=True):
-    
     clean_email = ""
-
     header = f"""```
 Subject: {email.subject}
 From: {email.sender.address}
@@ -261,9 +198,7 @@ Is Read: {email.is_read}
 Has Attachment: {email.has_attachments}
 Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
 """
-
     if include_summary:
-        # Clean email body
         summary = header + "\nSummary: " + get_email_summary(clean_html(email.body))
     else:
         summary = header
@@ -272,9 +207,7 @@ Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
     return summary
 
 def format_email_summary_only(email):
-    
     clean_email = ""
-
     header = f"""```
 From: {email.sender.address}
 Subject: {email.subject}
@@ -285,7 +218,6 @@ Subject: {email.subject}
 
 
 def format_email_header(email):
-    
     header = { 'object_id': email.object_id, 'conversationid': email.conversation_id, 'subject': email.subject, 'from': email.sender.address }
     return header
 
@@ -296,7 +228,6 @@ class MSSearchEmailsId(BaseTool):
     query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
     The first response will indicate how many emails total. use this tool multiple times and increment the email_number to get all the emails
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
     #return_direct= False
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
@@ -306,7 +237,7 @@ class MSSearchEmailsId(BaseTool):
             notify_channel.queue_declare(queue='notify')
 
             print(query)
-            emails = search_emails(query)
+            emails = search_emails_return_unique_conv(query)
             #response = validate_response(emails)
             ai_summary = ""
             human_summary = ""
@@ -335,7 +266,6 @@ class MSSearchEmails(BaseTool):
     To use the tool you must provide the following search parameter "query"
     query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
     #return_direct= True
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
@@ -344,8 +274,6 @@ class MSSearchEmails(BaseTool):
             connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
             notify_channel = connection.channel()
             notify_channel.queue_declare(queue='notify')
-            #handler = RabbitHandler(notify_channel)
-
 
             emails = search_emails_return_unique_conv(query)
             ai_summary = ""
@@ -355,12 +283,10 @@ class MSSearchEmails(BaseTool):
                     summary = summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
                     human_summary = human_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + "\n"
                 notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
-                #print(emails)
                 response = []
                 for email in emails:
                     email_chain = get_email_chain(email['conversationid'])
                     response.append(email_chain)
-                    #print(email_chain)
                     notify_channel.basic_publish(exchange='',routing_key='notify',body=email_chain)
             else:
                 return "No emails found"  
@@ -385,7 +311,6 @@ class MSGetEmailDetail(BaseTool):
     Be careful to always use double quotes for strings in the json string
     Returns email headers and the body. 
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
     #return_direct= True
     def _run(self, EmailID: str = None, ConversationID: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
@@ -419,16 +344,10 @@ class MSCreateEmail(BaseTool):
     body should be html formatted and must include a salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
     Be careful to always use double quotes for strings in the json string 
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
     return_direct= True
     def _run(self, recipient: str, subject: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            # print(text)
-            # data = parse_input(text)
-            # recipient = data.get("recipient")
-            # subject = data.get("subject")
-            # body = data.get("body")
             response = draft_email(recipient, subject, body)
             return validate_response(response)
         except Exception as e:
@@ -447,16 +366,11 @@ class MSSendEmail(BaseTool):
     body should be html formatted must include a salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
     Be careful to always use double quotes for strings in the json string 
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
     return_direct= True
     def _run(self, recipient: str, subject: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            # print(text)
-            # data = parse_input(text)
-            # recipient = data.get("recipient")
-            # subject = data.get("subject")
-            # body = data.get("body")
             response = draft_email(recipient, subject, body)
             return validate_response(response)
         except Exception as e:
@@ -474,7 +388,7 @@ class MSReplyToEmail(BaseTool):
     body should be html formatted must include a salutation and opening line at the start and signature from the sender at the end.
     Be careful to always use double quotes for strings in the json string 
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
     return_direct= True
     def _run(self, ConversationID: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
@@ -496,7 +410,7 @@ class MSForwardEmail(BaseTool):
     body should be html formatted must include a salutation and opening line at the start and signature from the sender at the end.
     Be careful to always use double quotes for strings in the json string 
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
     return_direct= True
     def _run(self, ConversationID: str, recipient: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
@@ -517,16 +431,11 @@ class MSAutoReplyToEmail(BaseTool):
     To use the tool you must provide the following parameter "ConversationID"
     Be careful to always use double quotes for strings in the json string 
     """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
+
     return_direct= True
     def _run(self, ConversationID: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            # print(text)
-            # data = parse_input(text)
-            
-            # subject = data.get("subject")
-            # body = data.get("body")
             email_chain = get_email_chain(ConversationID)
             email_response = reply_to_email_summary(email_chain)
             response = create_email_reply(ConversationID, email_response)
