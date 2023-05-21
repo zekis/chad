@@ -17,6 +17,7 @@ from bots.langchain_todo import TaskBot
 from bots.langchain_browser import WebBot
 from bots.langchain_memory import MemoryBotRetrieveAll, MemoryBotStore, MemoryBotSearch, MemoryBotDelete, MemoryBotUpdate
 from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSSearchEmails, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
+from bots.loaders.calendar import MSGetCalendarEvents
 from bots.langchain_planner import PlannerBot
 from bots.langchain_outlook import EmailBot
 from bots.langchain_peformance import ReviewerBot
@@ -231,6 +232,8 @@ def load_chads_tools(llm) -> list():
     tools.append(MSCreateEmail())
     tools.append(MSForwardEmail())
     tools.append(MSGetEmailDetail())
+
+    tools.append(MSGetCalendarEvents())
 
     #tools.append(PlannerBot())
     tools.append(TaskBot())
