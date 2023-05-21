@@ -15,18 +15,18 @@ import threading
 async def task_scheduler():
     #publish("Let me check to see if I have any scheduled tasks due today.")
     while True:
-        await process_schedule()
+        process_schedule()
         await asyncio.sleep(config.Todo_PollingIntervalSeconds)
         
 async def ai_response():
     publish("bot1_online")
     while True:
         #model_selector()
-        await model_response()
+        model_response()
         await asyncio.sleep(0.5)
         #await asyncio.Event().wait()
     
-async def main2():
+async def main():
     ai_tasks = []
     ai_tasks.append(asyncio.create_task(ai_response()))
     ai_tasks.append(asyncio.create_task(task_scheduler()))
@@ -35,4 +35,4 @@ async def main2():
 
 
 if __name__ == "__main__":
-    asyncio.run(main2())
+    asyncio.run(main())

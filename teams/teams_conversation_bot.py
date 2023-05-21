@@ -7,6 +7,7 @@ from pathlib import Path
 import json
 import random
 import requests
+import subprocess
 
 from typing import List
 from botbuilder.core import CardFactory, TurnContext, MessageFactory, ShowTypingMiddleware
@@ -61,6 +62,8 @@ class TeamsConversationBot(TeamsActivityHandler):
     message_channel.queue_declare(queue='message')
     notify_channel.queue_declare(queue='notify')
     schedule_channel.queue_declare(queue='schedule')
+
+    process = None
     #ADAPTER = BotFrameworkAdapter
 
     def __init__(self, app_id: str, app_password: str, conversation_references: Dict[str, ConversationReference]):
@@ -71,10 +74,32 @@ class TeamsConversationBot(TeamsActivityHandler):
         
 
     async def on_message_activity(self, turn_context: TurnContext):
+        global process
         self._add_conversation_reference(turn_context.activity)
         #TurnContext.remove_recipient_mention(turn_context.activity)
         text = turn_context.activity.text.strip().lower()
-
+        if text.lower() == "start":
+            #start the bot
+            """start the bot"""
+            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Starting bot..."))
+            process = subprocess.Popen(['python', 'ai.py'])
+            return
+        if text.lower() == "stop":
+            #stop the bot
+            """stop the bot"""
+            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopping bot..."))
+            process.terminate()
+            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopped"))
+            return
+        if text.lower() == "restart":
+            #stop the bot
+            """stop the bot"""
+            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopping bot..."))
+            process.terminate()
+            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopped"))
+            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Starting bot..."))
+            process = subprocess.Popen(['python', 'ai.py'])
+            return
         message = random.choice(thinking_messages)
         response = self.message_channel.queue_declare('message', passive=True)
         if response.method.message_count > 0:
@@ -97,8 +122,8 @@ class TeamsConversationBot(TeamsActivityHandler):
 
     def init_bot(self, bot_name):
         current_date_time = datetime.now().date()
-        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Hey Bro! Its my first day, lets get to know each other..."))
-        self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"Establish a personal connection with your human by asking for their name and using it in future interactions. This will help build trust and rapport between you and your human."))
+        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Hey Bro!"))
+        #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"Establish a personal connection with your human by asking for their name and using it in future interactions. This will help build trust and rapport between you and your human."))
         #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"As an AI, You are keen to learn things about me, my family, likes and dislikes, so ask a random question using the human tool and save the response to memory"))
         
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="List the tasks in the AutoCHAD folder and use non task tools to action each one. Once complete mark the task as completed") 

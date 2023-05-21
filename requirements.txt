@@ -11,3 +11,5 @@ tiktoken
 pika
 O365
 unstructured
+#playwright
+chromadb

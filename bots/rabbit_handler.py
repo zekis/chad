@@ -31,6 +31,14 @@ class RabbitHandler(BaseCallbackHandler):
             #"""Run on agent action."""
             self.message_channel.basic_publish(exchange='',routing_key='notify',body=thought)
             #print_text(action.log, color=color if color else self.color)
+        observation_pattern = r'Observation: (.*)'
+        obs_match = re.search(observation_pattern, action.log)
+        if obs_match:
+            observation = obs_match.group(1)
+            #print("Thought:", thought)
+            #"""Run on agent action."""
+            self.message_channel.basic_publish(exchange='',routing_key='notify',body=observation)
+            #print_text(action.log, color=color if color else self.color)
     
     def on_agent_finish(
         self,

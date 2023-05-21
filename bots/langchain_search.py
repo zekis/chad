@@ -40,6 +40,7 @@ class SearchBot(BaseTool):
     description = """useful for when you need to find information on the internet bro.
     Do not use this tool for searching for tasks, memories, or emails.
     To use the tool you must provide clear instructions for the bot to complete.
+    Do not escape characters
     """
     
     search = SerpAPIWrapper()
@@ -56,4 +57,4 @@ class SearchBot(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("TaskBot does not support async")
 
-   
+    

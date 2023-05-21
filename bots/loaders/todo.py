@@ -95,7 +95,7 @@ def folders_to_string(folders_list):
         folders_str = folders_str + "\n - " + str(folder)
     return folders_str
 
-async def scheduler_check_tasks(folder, channel):
+def scheduler_check_tasks(folder, channel):
     account = authenticate()
     todo =  account.tasks()
     try:
@@ -130,7 +130,7 @@ class MSGetTasks(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
@@ -159,7 +159,7 @@ class MSGetTaskDetail(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[BaseModel] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, text: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
@@ -180,7 +180,7 @@ class MSGetTaskFolders(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, query, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         print(f"query: {query}") 
@@ -197,7 +197,7 @@ class MSCreateTaskFolder(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
@@ -228,7 +228,7 @@ class MSSetTaskComplete(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             print(text)
@@ -272,7 +272,7 @@ class MSCreateTask(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             print(text)
@@ -322,7 +322,7 @@ class MSDeleteTask(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             print(text)
@@ -362,7 +362,7 @@ class MSUpdateTask(BaseTool):
     Be careful to always use double quotes for strings in the json string
     """
     #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-
+    return_direct= True
     def _run(self, text, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             print(text)

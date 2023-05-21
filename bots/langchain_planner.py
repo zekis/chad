@@ -41,7 +41,7 @@ class PlannerBot(BaseTool):
             notify_channel = connection.channel()
             notify_channel.queue_declare(queue='notify')
 
-            return self.model_response(text, notify_channel)
+            return self.model_response(text, tools, notify_channel)
         except Exception as e:
             return repr(e)
     
@@ -53,8 +53,9 @@ class PlannerBot(BaseTool):
     def model_response(self, text, tools, notify_channel):
         try:
             #config
+            
             load_dotenv(find_dotenv())
-
+            current_date_time = datetime.now()
             # Define embedding model
             #prompt = "You are a planner who is an expert at coming up with a todo list."
             #template = "Come up with a todo list for this objective: {text}"
@@ -80,8 +81,8 @@ class PlannerBot(BaseTool):
                 verbose=True,
                 callbacks=[handler]
             )
-
-            response = chatgpt_chain.run(objective=text, tools=tool_details, callbacks=[handler])
+            query = f"Given the current data and time of {current_date_time}, {text}"
+            response = chatgpt_chain.run(objective=query, tools=tool_details, callbacks=[handler])
             return response
         except Exception as e:
             traceback.print_exc()
