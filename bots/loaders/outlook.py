@@ -58,7 +58,7 @@ def authenticate():
 # This function returns a summary of the given email using OpenAI's GPT-3 API.
 def get_email_summary(email):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
-    query = f"Please summarise the the following email: {email}"
+    query = f"Please provide a detailed summary for the following email: {email}"
     print(f"Function Name: get_email_summary | Query: {query}")
     return chat([HumanMessage(content=query)]).content
 
@@ -99,6 +99,15 @@ def get_email(ObjectID):
     final_response = format_email(email)        
     return final_response
 
+def mark_read(ObjectID):
+    print(f"Function Name: mark_read | ObjectID: {ObjectID}")
+    account = authenticate()
+    mailbox = account.mailbox()
+    inbox = mailbox.inbox_folder()
+    # Fetches a single email matching the given `ObjectID` from the inbox and marks it as read.
+    email = inbox.get_message(ObjectID)
+    email.mark_as_read()  
+    return True
 
 def search_emails_return_unique_conv(search_query):
     print(f"Function Name: search_emails_return_unique_conv | Search Query: {search_query}")
@@ -119,6 +128,21 @@ def search_emails_return_unique_conv(search_query):
                 conversation_ids.add(email.conversation_id)  # Add the unique conversation_id to the set
                 final_response.append(format_email_header(email))  # Only append if conversation_id is unique
         return final_response
+    return None
+
+def search_emails(search_query):
+    print(f"Function Name: search_emails | Search Query: {search_query}")
+    account = authenticate()
+    mailbox = account.mailbox()
+    inbox = mailbox.inbox_folder()
+
+    query = inbox.new_query().search(search_query)
+
+    emails = inbox.get_messages(limit=5, query=query)
+
+    count = 0
+    if emails:
+        return emails
     return None
 
 def create_email_reply(ConversationID, body):
@@ -180,11 +204,22 @@ def draft_email(recipient, subject, body):
         return "email must contain a body. Perhaps work out what content you need to send first"
 
 def clean_html(html):
+    remove_strings = [
+        "SG Controls - Capability StatementSG Controls - Case StudiesSG Controls - Technical Services",
+        "SG Controls Pty Ltd is ISO 9001 Quality certified, safety aware and environmentally conscious.  This email contains material, which may be confidential, legally privileged, and/or the subject of copyright.",
+        "If you are not an intended recipient, please advise the sender and delete it. Confidentiality and privilege are not waived.",
+        "The views or opinions expressed in this email may be the sender",
+        "own and not necessarily shared / authorised by SG Controls Pty Ltd.",
+        "No liability for loss or damage resulting from your receipt of / dealing with this email is accepted.",
+        "INTERNAL EMAIL: This email originated from inside the SG Controls network.",
+        "CAUTION: This email originated from outside of the organisation. Do not click links or open attachments unless you recognise the sender and know the content is safe."]
     soup = BeautifulSoup(html, 'html.parser')
     # Remove unnecessary tags
     for tag in soup(['style', 'script', 'img']):
         tag.decompose()
     clean_text = soup.get_text()
+    for s in remove_strings:
+        clean_text = clean_text.replace(s, '')
     return clean_text
 
 def format_email(email, include_summary=True):
@@ -199,7 +234,7 @@ Has Attachment: {email.has_attachments}
 Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
 """
     if include_summary:
-        summary = header + "\nSummary: " + get_email_summary(clean_html(email.body))
+        summary = header + "\nSummary: " + get_email_summary(clean_html(email.body)) + "\n"
     else:
         summary = header
 
@@ -211,6 +246,7 @@ def format_email_summary_only(email):
     header = f"""```
 From: {email.sender.address}
 Subject: {email.subject}
+Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
 """
     summary = header + "\nSummary: " + get_email_summary(clean_html(email.body)) + "\n"
     summary = summary + "```\n"
@@ -220,6 +256,25 @@ Subject: {email.subject}
 def format_email_header(email):
     header = { 'object_id': email.object_id, 'conversationid': email.conversation_id, 'subject': email.subject, 'from': email.sender.address }
     return header
+
+def scheduler_check_emails():
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='message')
+
+    current_date_time = datetime.now().strftime('%Y-%m-%d')
+    query = f"isread:no received:{current_date_time}"
+    
+    #print(query)
+    emails = search_emails(query)
+    
+    if emails:
+        for email in emails:
+
+            ai_summary = format_email_summary_only(email)
+            email.mark_as_read()
+            return ai_summary
+    return None
 
 class MSSearchEmailsId(BaseTool):
     name = "SEARCH_EMAILS_RETURN_IDS"
@@ -267,7 +322,7 @@ class MSSearchEmails(BaseTool):
     query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
     """
     #return_direct= True
-    def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, query: str, notify: bool = True, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             print(query)
@@ -282,7 +337,8 @@ class MSSearchEmails(BaseTool):
                 for email in emails:
                     summary = summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
                     human_summary = human_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + "\n"
-                notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
+                if notify:
+                    notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
                 response = []
                 for email in emails:
                     email_chain = get_email_chain(email['conversationid'])
