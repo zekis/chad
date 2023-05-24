@@ -102,7 +102,7 @@ def scheduler_check_tasks(folder, channel):
         folder = todo.get_folder(folder_name=folder)
     except:
         #Later I will call the AI to create the folder
-        channel.basic_publish(exchange='',routing_key='message',body="Need to create the AutoCHAD task folder")
+        channel.basic_publish(exchange='',routing_key='notify',body="Need to create the AutoCHAD task folder")
         return "Need to create the AutoCHAD task folder"
     
     todo_list = folder.get_tasks()

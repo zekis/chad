@@ -32,16 +32,16 @@ class PlannerBot(BaseTool):
     Please be very clear what the objective is!
     """
 
+    
+
     def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             print(text)
 
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
+            
 
-            return self.model_response(text, tools, notify_channel)
+            return self.model_response(text, tools)
         except Exception as e:
             return repr(e)
     
@@ -50,7 +50,7 @@ class PlannerBot(BaseTool):
         raise NotImplementedError("PlannerBot does not support async")
 
     #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
-    def model_response(self, text, tools, notify_channel):
+    def model_response(self, text, tools):
         try:
             #config
             
@@ -60,6 +60,9 @@ class PlannerBot(BaseTool):
             #prompt = "You are a planner who is an expert at coming up with a todo list."
             #template = "Come up with a todo list for this objective: {text}"
             #chat = OpenAI(temperature=0)
+            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            notify_channel = connection.channel()
+            notify_channel.queue_declare(queue='notify')
            
             handler = RabbitHandler(notify_channel)
 

@@ -14,7 +14,7 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
-from bots.utils import validate_response, parse_input
+from bots.utils import validate_response, parse_input, sanitize_email
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
@@ -58,7 +58,7 @@ def authenticate():
 # This function returns a summary of the given email using OpenAI's GPT-3 API.
 def get_email_summary(email):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
-    query = f"Please provide a detailed summary for the following email: {email}"
+    query = f"Please provide a detailed summary, ignoring capability statements, and confidentiality disclaimers for the following email: {email}"
     print(f"Function Name: get_email_summary | Query: {query}")
     return chat([HumanMessage(content=query)]).content
 
@@ -205,9 +205,13 @@ def draft_email(recipient, subject, body):
 
 def clean_html(html):
     remove_strings = [
-        "SG Controls - Capability StatementSG Controls - Case StudiesSG Controls - Technical Services",
-        "SG Controls Pty Ltd is ISO 9001 Quality certified, safety aware and environmentally conscious.  This email contains material, which may be confidential, legally privileged, and/or the subject of copyright.",
-        "If you are not an intended recipient, please advise the sender and delete it. Confidentiality and privilege are not waived.",
+        "SG Controls - Capability Statement",
+        "SG Controls - Case Studies",
+        "SG Controls - Technical Services",
+        "SG Controls Pty Ltd is ISO 9001 Quality certified, safety aware and environmentally conscious.",
+        "This email contains material, which may be confidential, legally privileged, and/or the subject of copyright.",
+        "If you are not an intended recipient, please advise the sender and delete it.",
+        "Confidentiality and privilege are not waived.",
         "The views or opinions expressed in this email may be the sender",
         "own and not necessarily shared / authorised by SG Controls Pty Ltd.",
         "No liability for loss or damage resulting from your receipt of / dealing with this email is accepted.",
@@ -220,6 +224,8 @@ def clean_html(html):
     clean_text = soup.get_text()
     for s in remove_strings:
         clean_text = clean_text.replace(s, '')
+    #finally truncate the message to avoid token errors
+    clean_text = clean_text[:8000]
     return clean_text
 
 def format_email(email, include_summary=True):
@@ -281,7 +287,6 @@ class MSSearchEmailsId(BaseTool):
     description = """useful for when you need to search through emails and get their IDs.
     To use the tool you must provide the following search parameter "query"
     query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
-    The first response will indicate how many emails total. use this tool multiple times and increment the email_number to get all the emails
     """
     #return_direct= False
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:

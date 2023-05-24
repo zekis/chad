@@ -72,9 +72,9 @@ def get_input():
 
 #callbacks
 def get_plan_input(question):
-    timeout = time.time() + 60*1   # 1 minutes from now
+    timeout = time.time() + 60*5   # 1 minutes from now
     #Calculate plan
-    plan = plannerBot.model_response(question, tools, notify_channel)
+    plan = plannerBot.model_response(question, tools)
     publish(plan)
     publish("Would you like to make any changes to the plan above? otherwise type 'continue' to proceed or 'pass' to cancel.")
     #loop until human happy with plan
@@ -91,12 +91,12 @@ def get_plan_input(question):
                 return "stop"
             else:
                 new_prompt = f"Update the following plan: {plan} using the following input: {question}"
-                plan = plannerBot.model_response(new_prompt, tools, notify_channel)
+                plan = plannerBot.model_response(new_prompt, tools)
                 publish(plan)
                 publish("Would you like to make any changes to the plan above? otherwise type 'continue' to proceed or 'pass' to cancel.")
-                timeout = time.time() + 60*1
+                timeout = time.time() + 60*5
         if time.time() > timeout:
-            return plan
+            return "stop"
         time.sleep(0.5)
     return plan
 
@@ -127,9 +127,10 @@ def model_response():
                     
                     if revised_plan != 'stop':
 
-                        inital_prompt = f'''With only the tools provided and with the current date and time of {current_date_time},
-                        Please assist using the following steps as a guide: {revised_plan} to reach the objective: {question}?
-                        Answer using markdown'''
+                        inital_prompt = f'''Thinking step by step and with only the tools provided and with the current date and time of {current_date_time},
+                        Answer using markdown, Please assist using the following steps as a guide: {revised_plan} to reach the objective.
+                        Objective: {question}?
+                        '''
                         response = agent_chain.run(input=inital_prompt, callbacks=[handler])
 
                         #review = reviewerBot.model_response(question, response, message_channel, inital_prompt)
@@ -138,11 +139,8 @@ def model_response():
                         publish("Ok, let me know if I can be of assistance.")
                 else:
                     inital_prompt = f'''Thinking step by step and with only the tools provided and with the current date and time of {current_date_time},
-                                    You are a chilled out bro, having a chat with a laid-back Aussie who lives in Ellenbrook, Perth, Western Australia. 
-                                    Your role is to guide the conversation, addressing the queries raised and providing additional relevant information when it's suitable.
-                                    In the course of the conversation, if any advice or information emerges that may need to be recalled at a specific date or time, utilize the memory tool. 
-                                    Remember, your primary role is to facilitate and guide, making the most of the tools at your disposal to assist in the conversation."""
-                                    Respond in markdown, Please assist using to reach the objective: {question}? '''
+                                    Respond in markdown and assist to reach the objective. 
+                                    Objective: {question}? '''
                     response = agent_chain.run(input=inital_prompt, callbacks=[handler])
                 print(f"Memory: {len(memory.buffer)}")
     except Exception as e:
@@ -151,10 +149,12 @@ def model_response():
         
 
 def publish(message):
+    notify_channel = connection.channel()
     notify_channel.basic_publish(exchange='',
                       routing_key='notify',
                       body=message)
     print(message)
+    notify_channel.close()
 
 def process_task_schedule():
     task = scheduler_check_tasks(config.Todo_BotsTaskFolder,notify_channel)
@@ -185,7 +185,10 @@ def process_email_schedule():
             prompt = f'''Given the following email, Suggest actions or a reply that could be used to respond to the email below:
             {email}'''
             plan = get_plan_input(prompt)
-            message_channel.basic_publish(exchange='',routing_key='message',body=plan)
+            if plan != "stop":
+                message_channel.basic_publish(exchange='',routing_key='message',body=plan)
+            else:
+                publish("Ok, let me know if I can be of assistance.")
         #     response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
         except Exception as e:
             publish( f"An exception occurred: {e}")
@@ -196,14 +199,17 @@ def process_email_schedule():
         # task.save()
 
 def consume():
-    method, properties, body = notify_channel.basic_get(queue='message', auto_ack=True)
+    message_channel = connection.channel()
+    message_channel.queue_declare(queue='message')
+    method, properties, body = message_channel.basic_get(queue='message', auto_ack=True)
+    message_channel.close()
     return body
 
-def consume_schedule():
-    method, properties, body = notify_channel.basic_get(queue='schedule', auto_ack=True)
-    if body:
-        print(f"schedule: {body}")
-    return body
+# def consume_schedule():
+#     method, properties, body = schedule_channel.basic_get(queue='schedule', auto_ack=True)
+#     if body:
+#         print(f"schedule: {body}")
+#     return body
 
 def chad_zero_shot_prompt(llm, tools, memory):
    
@@ -225,7 +231,7 @@ def chad_zero_shot_prompt(llm, tools, memory):
     # )
 
     #llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt)
-    chat_history = MessagesPlaceholder(variable_name="chat_history")
+    
     #agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
     agent_chain = initialize_agent(
         tools=tools,
@@ -235,7 +241,7 @@ def chad_zero_shot_prompt(llm, tools, memory):
         verbose=True,
         agent_kwargs = {
             "memory_prompts": [chat_history],
-            "input_variables": ["input", "chat_history", "agent_scratchpad"]
+            "input_variables": ["input", "agent_scratchpad", "chat_history"]
         })
     #agent.chain.verbose = True
     #agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
@@ -249,11 +255,11 @@ def load_chads_tools(llm) -> list():
     #Todo Model
     #etc
     tools.append(WebBot())
-    tools.append(MemoryBotStore())
-    tools.append(MemoryBotRetrieveAll())
-    tools.append(MemoryBotSearch())
-    tools.append(MemoryBotUpdate())
-    tools.append(MemoryBotDelete())
+    #tools.append(MemoryBotStore())
+    #tools.append(MemoryBotRetrieveAll())
+    #tools.append(MemoryBotSearch())
+    #tools.append(MemoryBotUpdate())
+    #tools.append(MemoryBotDelete())
     #tools.append(EmailBot())
     #added the ability for the master to email directly
     #tools.append(MSSearchEmails())
@@ -302,6 +308,6 @@ reviewerBot = ReviewerBot()
 # vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
 handler = RabbitHandler(notify_channel)
 tools = load_chads_tools(llm)
-
-memory = ConversationBufferWindowMemory(memory_key="chat_history",human_prefix="Question:",k=2)
+chat_history = MessagesPlaceholder(variable_name="chat_history")
+memory = ConversationBufferWindowMemory(memory_key="chat_history",k=2)
 agent_chain = chad_zero_shot_prompt(llm, tools, memory)
