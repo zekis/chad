@@ -12,6 +12,7 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
+from bots.utils import encode_message, decode_message
 from bots.utils import validate_response, parse_input, sanitize_subject
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
@@ -95,14 +96,13 @@ def folders_to_string(folders_list):
         folders_str = folders_str + "\n - " + str(folder)
     return folders_str
 
-def scheduler_check_tasks(folder, channel):
+def scheduler_check_tasks(folder):
     account = authenticate()
     todo =  account.tasks()
     try:
         folder = todo.get_folder(folder_name=folder)
     except:
         #Later I will call the AI to create the folder
-        channel.basic_publish(exchange='',routing_key='notify',body="Need to create the AutoCHAD task folder")
         return "Need to create the AutoCHAD task folder"
     
     todo_list = folder.get_tasks()

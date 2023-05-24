@@ -25,6 +25,7 @@ from bots.loaders.outlook import MSCreateEmail
 
 from bots.loaders.todo import scheduler_check_tasks
 from bots.loaders.outlook import scheduler_check_emails
+from bots.utils import encode_message, decode_message
 
 from langchain.experimental import AutoGPT
 from langchain.experimental import BabyAGI
@@ -149,6 +150,7 @@ def model_response():
         
 
 def publish(message):
+    message = encode_message('prompt', message)
     notify_channel = connection.channel()
     notify_channel.basic_publish(exchange='',
                       routing_key='notify',
@@ -157,7 +159,7 @@ def publish(message):
     notify_channel.close()
 
 def process_task_schedule():
-    task = scheduler_check_tasks(config.Todo_BotsTaskFolder,notify_channel)
+    task = scheduler_check_tasks(config.Todo_BotsTaskFolder)
     if not task:
         print("No tasks for me to do.")
     else:
@@ -203,6 +205,7 @@ def consume():
     message_channel.queue_declare(queue='message')
     method, properties, body = message_channel.basic_get(queue='message', auto_ack=True)
     message_channel.close()
+    
     return body
 
 # def consume_schedule():

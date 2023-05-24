@@ -6,6 +6,9 @@ import traceback
 import uuid
 from datetime import datetime
 from http import HTTPStatus
+#https://github.com/microsoft/BotBuilder-Samples
+
+
 from typing import Dict
 from teams.teams_rabbit import messages, process_message
 

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 from langchain.input import print_text
 from langchain.schema import AgentAction, AgentFinish, LLMResult
+from bots.utils import encode_message, decode_message
 import pika
 import re
 
@@ -29,7 +30,8 @@ class RabbitFeedbackHandler(BaseCallbackHandler):
             thought = match.group(1)
             #print("Thought:", thought)
             #"""Run on agent action."""
-            self.message_channel.basic_publish(exchange='',routing_key='message',body=thought)
+            message = encode_message('prompt', thought)
+            self.message_channel.basic_publish(exchange='',routing_key='message',body=message)
             #print_text(action.log, color=color if color else self.color)
     
     def on_agent_finish(
@@ -44,6 +46,7 @@ class RabbitFeedbackHandler(BaseCallbackHandler):
         #print(f"on_agent_finish Callback {finish.log}")
         message = finish.return_values
         if message:
+            message = encode_message('prompt', message)
             self.message_channel.basic_publish(exchange='',routing_key='notify',body=finish.return_values)
 
     def on_chain_end(
@@ -57,5 +60,6 @@ class RabbitFeedbackHandler(BaseCallbackHandler):
         #print(f"on_chain_end Callback {outputs}")
         message = outputs.get("output")
         if message:
+            message = encode_message('prompt', message)
             self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
 

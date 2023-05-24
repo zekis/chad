@@ -18,6 +18,7 @@ from botbuilder.schema._connector_client_enums import ActionTypes
 #from bots.model_openai import model_response
 from botbuilder.core import BotFrameworkAdapter
 import pika
+from bots.utils import encode_message, decode_message
 
 from typing import Dict
 
@@ -81,23 +82,23 @@ class TeamsConversationBot(TeamsActivityHandler):
         if text.lower() == "start":
             #start the bot
             """start the bot"""
-            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Starting bot..."))
+            self.publish(f"Starting bot...")
             process = subprocess.Popen(['python', 'ai.py'])
             return
         if text.lower() == "stop":
             #stop the bot
             """stop the bot"""
-            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopping bot..."))
+            self.publish(f"Stopping bot...")
             process.terminate()
-            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopped"))
+            self.publish(f"Stopped")
             return
         if text.lower() == "restart":
             #stop the bot
             """stop the bot"""
-            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopping bot..."))
+            self.publish(f"Stopping bot...")
             process.terminate()
-            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Stopped"))
-            self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Starting bot..."))
+            self.publish(f"Stopped")
+            self.publish(f"Starting bot...")
             process = subprocess.Popen(['python', 'ai.py'])
             return
         message = random.choice(thinking_messages)
@@ -107,7 +108,7 @@ class TeamsConversationBot(TeamsActivityHandler):
         
         #self.notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
         
-
+        
         self.message_channel.basic_publish(exchange='',routing_key='message',body=text)
 
         print(text)
@@ -122,7 +123,7 @@ class TeamsConversationBot(TeamsActivityHandler):
 
     def init_bot(self, bot_name):
         current_date_time = datetime.now().date()
-        self.notify_channel.basic_publish(exchange='',routing_key='notify',body=(f"Hey Bro!"))
+        self.publish("Hey Bro!")
         #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"Establish a personal connection with your human by asking for their name and using it in future interactions. This will help build trust and rapport between you and your human."))
         #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"As an AI, You are keen to learn things about me, my family, likes and dislikes, so ask a random question using the human tool and save the response to memory"))
         
@@ -130,18 +131,29 @@ class TeamsConversationBot(TeamsActivityHandler):
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the weather in ellebrook?")
         #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the latest news for Perth WA?")
 
+    def publish(self, message):
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        notify_channel = connection.channel()
+        notify_channel.queue_declare(queue='notify')
+        message = encode_message("prompt", message)
+        notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
 
     async def process_message(self, ADAPTER):
         for conversation_reference in self.conversation_references.values():
             method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
             if body:
-                decoded_body = body.decode("utf-8")
+                print(f"SERVER: {body}")
+                type, body, actions = decode_message(body)
+                #decoded_body = body.decode("utf-8")
+                decoded_body = body
                 if decoded_body == "bot1_online":
                     self.init_bot("AutoCHAD")
                 else:
-                    await ADAPTER.continue_conversation(
-                        conversation_reference,
-                        lambda turn_context: turn_context.send_activity(decoded_body),
-                        self._app_id,
-                    )
-                    print(decoded_body)
+                    if type == "Prompt":
+                        await ADAPTER.continue_conversation(
+                            conversation_reference,
+                            lambda turn_context: turn_context.send_activity(decoded_body),
+                            self._app_id,
+                        )
+                        print(decoded_body)

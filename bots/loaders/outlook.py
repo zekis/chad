@@ -14,6 +14,7 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
+from bots.utils import encode_message, decode_message
 from bots.utils import validate_response, parse_input, sanitize_email
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
@@ -264,9 +265,9 @@ def format_email_header(email):
     return header
 
 def scheduler_check_emails():
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='message')
+    # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    # notify_channel = connection.channel()
+    # notify_channel.queue_declare(queue='message')
 
     current_date_time = datetime.now().strftime('%Y-%m-%d')
     query = f"isread:no received:{current_date_time}"
@@ -282,6 +283,14 @@ def scheduler_check_emails():
             return ai_summary
     return None
 
+def publish(message):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    message = encode_message("prompt", message)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
+
 class MSSearchEmailsId(BaseTool):
     name = "SEARCH_EMAILS_RETURN_IDS"
     description = """useful for when you need to search through emails and get their IDs.
@@ -292,10 +301,6 @@ class MSSearchEmailsId(BaseTool):
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
-
             print(query)
             emails = search_emails_return_unique_conv(query)
             #response = validate_response(emails)
@@ -305,7 +310,7 @@ class MSSearchEmailsId(BaseTool):
                 for email in emails:
                     ai_summary = ai_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
                     human_summary = human_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + "\n"
-                notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
+                publish(human_summary)
             else:
                 return "No emails found"
 
@@ -331,10 +336,6 @@ class MSSearchEmails(BaseTool):
         """Use the tool."""
         try:
             print(query)
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
-
             emails = search_emails_return_unique_conv(query)
             ai_summary = ""
             human_summary = ""
@@ -343,12 +344,12 @@ class MSSearchEmails(BaseTool):
                     summary = summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
                     human_summary = human_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + "\n"
                 if notify:
-                    notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
+                    publish(human_summary)
                 response = []
                 for email in emails:
                     email_chain = get_email_chain(email['conversationid'])
                     response.append(email_chain)
-                    notify_channel.basic_publish(exchange='',routing_key='notify',body=email_chain)
+                    publish(email_chain)
             else:
                 return "No emails found"  
                 
@@ -376,16 +377,13 @@ class MSGetEmailDetail(BaseTool):
     def _run(self, EmailID: str = None, ConversationID: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
-
+           
             if EmailID is not None:
                 response = get_email(EmailID)
             if ConversationID is not None:
                 response = get_email_chain(ConversationID)
-            notify_channel.basic_publish(exchange='',routing_key='notify',body=response)
-            notify_channel.close()
+            publish(response)
+            
 
             return response
         except Exception as e:

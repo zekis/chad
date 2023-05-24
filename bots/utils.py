@@ -2,6 +2,7 @@ import json
 import re
 from typing import Any, Dict, Optional, Type
 from langchain.text_splitter import CharacterTextSplitter
+from botbuilder.schema import ChannelAccount, CardAction, ActionTypes, SuggestedActions
 
 text_splitter = CharacterTextSplitter(        
     separator = "\n\n",
@@ -50,3 +51,24 @@ def create_email(recipient,subject,body):
     clean_subject = sanitize_email(subject)
     clean_body = sanitize_email(body)
     return '{"recipient": "' + recipient + '", "subject": "' + clean_subject + '", "body": "' + clean_body + '"}'
+
+def encode_message(type, prompt, actions: [CardAction] = None):
+    actions = [action.__dict__ for action in actions] if actions else []
+    message = {
+        "type": type,
+        "prompt": prompt,
+        "actions": actions
+    }
+    print(f"ENCODING: {message}")
+    return json.dumps(message)
+
+def decode_message(message):
+    message = message.decode("utf-8")
+    print(f"DECODING: {message}")
+    message_dict = json.loads(message)
+    type = message_dict.get('type')
+    prompt = message_dict.get('prompt')
+    actions_data = message_dict.get('actions')
+    actions = [CardAction(**action) for action in actions_data] if actions_data else []
+
+    return type, prompt, actions
