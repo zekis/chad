@@ -38,8 +38,8 @@ class RabbitHandler(BaseCallbackHandler):
             observation = obs_match.group(1)
             #print("Thought:", thought)
             #"""Run on agent action."""
-            message = encode_message('prompt', message)
-            self.message_channel.basic_publish(exchange='',routing_key='notify',body=observation)
+            message = encode_message('prompt', observation)
+            self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
             #print_text(action.log, color=color if color else self.color)
     
     def on_agent_finish(
@@ -54,8 +54,8 @@ class RabbitHandler(BaseCallbackHandler):
         #print(f"on_agent_finish Callback {finish.log}")
         message = finish.return_values
         if message:
-            message = encode_message('prompt', message)
-            self.message_channel.basic_publish(exchange='',routing_key='notify',body=finish.return_values)
+            message = encode_message('on_agent_finish', message)
+            self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
     def on_chain_end(
         self,

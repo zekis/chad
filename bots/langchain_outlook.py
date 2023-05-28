@@ -14,7 +14,7 @@ from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
 from bots.rabbit_handler import RabbitHandler
-from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSSearchEmails, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
+from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
 from bots.langchain_search import SearchBot
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun

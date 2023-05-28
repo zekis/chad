@@ -14,6 +14,7 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
+from teams.card_factories import create_list_card, create_email_card
 from bots.utils import encode_message, decode_message
 from bots.utils import validate_response, parse_input, sanitize_email
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
@@ -29,6 +30,7 @@ from langchain.docstore.document import Document
 from bs4 import BeautifulSoup
 
 from langchain.chat_models import ChatOpenAI
+
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.text_splitter import CharacterTextSplitter
@@ -56,10 +58,12 @@ def authenticate():
     account.authenticate()
     return account
 
+
+
 # This function returns a summary of the given email using OpenAI's GPT-3 API.
 def get_email_summary(email):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
-    query = f"Please provide a detailed summary, ignoring capability statements, and confidentiality disclaimers for the following email: {email}"
+    query = f"Please provide a detailed summary, ignoring capability statements and confidentiality disclaimers for the following email: {email}"
     print(f"Function Name: get_email_summary | Query: {query}")
     return chat([HumanMessage(content=query)]).content
 
@@ -71,34 +75,59 @@ def reply_to_email_summary(summary):
     print(f"Function Name: reply_to_email_summary | Query: {query}")
     return email_response
 
-def get_email_chain(ConversationID):
+# def get_email_chain(ConversationID):
+#     account = authenticate()
+#     mailbox = account.mailbox()
+#     inbox = mailbox.inbox_folder()
+
+#     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
+#     print(f"Function Name: get_email_chain | Query: {query}")
+#     emails = inbox.get_messages(limit=5,query=query)
+    
+#     count = 0
+#     if emails:
+#         final_response = ""
+#         for email in emails:
+#             count = count + 1
+#             final_response = final_response + format_email_summary_only(email)
+#         return final_response
+#     return None
+
+def get_conversation(ConversationID):
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
 
     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
-    print(f"Function Name: get_email_chain | Query: {query}")
-    emails = inbox.get_messages(limit=5,query=query)
+    print(f"Function Name: get_conversation | Query: {query}")
+    returned_emails = inbox.get_messages(limit=1,query=query)
     
     count = 0
-    if emails:
-        final_response = ""
-        for email in emails:
-            count = count + 1
-            final_response = final_response + format_email_summary_only(email)
-        return final_response
+    if returned_emails:
+        emails = list(returned_emails)
+        return emails[0]
     return None
 
 # This function takes an `ObjectID` as input and returns the email associated with that ID.
-def get_email(ObjectID):
-    print(f"Function Name: get_email | ObjectID: {ObjectID}")
+def get_message(ObjectID):
+    print(f"Function Name: get_message | ObjectID: {ObjectID}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
     # Fetches a single email matching the given `ObjectID` from the inbox.
-    email = inbox.get_message(ObjectID)
-    final_response = format_email(email)        
-    return final_response
+    returned_email = inbox.get_message(ObjectID)
+    return returned_email
+
+# # This function takes an `ObjectID` as input and returns the email associated with that ID.
+# def get_email(ObjectID):
+#     print(f"Function Name: get_email | ObjectID: {ObjectID}")
+#     account = authenticate()
+#     mailbox = account.mailbox()
+#     inbox = mailbox.inbox_folder()
+#     # Fetches a single email matching the given `ObjectID` from the inbox.
+#     email = inbox.get_message(ObjectID)
+#     final_response = format_email(email)        
+#     return final_response
 
 def mark_read(ObjectID):
     print(f"Function Name: mark_read | ObjectID: {ObjectID}")
@@ -200,6 +229,8 @@ def draft_email(recipient, subject, body):
         message.subject = subject
         message.body = body
         message.save_draft()
+        publish_card("Draft Email", message, message.body)
+        publish(preview_email(message))
         return "Email Created and Sent"
     else:
         return "email must contain a body. Perhaps work out what content you need to send first"
@@ -229,35 +260,44 @@ def clean_html(html):
     clean_text = clean_text[:8000]
     return clean_text
 
-def format_email(email, include_summary=True):
-    clean_email = ""
-    header = f"""```
-Subject: {email.subject}
-From: {email.sender.address}
-To: {', '.join([recipient.address for recipient in email.to[:5]])} {f"Cc: {', '.join([recipient.address for recipient in email.cc[:5]])}" if email.cc else ""} {f"Bcc: {', '.join([recipient.address for recipient in email.bcc[:5]])}" if email.bcc else ""}
-Importance: {email.importance.value}
-Is Read: {email.is_read}
-Has Attachment: {email.has_attachments}
-Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
-"""
-    if include_summary:
-        summary = header + "\nSummary: " + get_email_summary(clean_html(email.body)) + "\n"
-    else:
-        summary = header
+# def format_email(email, include_summary=True):
+#     clean_email = ""
+#     header = f"""```
+# Subject: {email.subject}
+# From: {email.sender.address}
+# To: {', '.join([recipient.address for recipient in email.to[:5]])} {f"Cc: {', '.join([recipient.address for recipient in email.cc[:5]])}" if email.cc else ""} {f"Bcc: {', '.join([recipient.address for recipient in email.bcc[:5]])}" if email.bcc else ""}
+# Importance: {email.importance.value}
+# Is Read: {email.is_read}
+# Has Attachment: {email.has_attachments}
+# Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
+# """
+#     if include_summary:
+#         summary = header + "\nSummary: " + get_email_summary(clean_html(email.body)) + "\n"
+#     else:
+#         summary = header
 
-    summary = summary + "```\n"
-    return summary
+#     summary = summary + "```\n"
+#     return summary
 
-def format_email_summary_only(email):
-    clean_email = ""
-    header = f"""```
+def format_email_summary_only(email, summary):
+    email_s = f"""```
 From: {email.sender.address}
 Subject: {email.subject}
 Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
+Summary: {summary}
+```
 """
-    summary = header + "\nSummary: " + get_email_summary(clean_html(email.body)) + "\n"
-    summary = summary + "```\n"
-    return summary
+    return email_s
+
+# def preview_email(email):
+#     clean_email = ""
+#     preview = f"""```
+# To: {', '.join([recipient.address for recipient in email.to[:5]])}
+# Subject: {email.subject}
+# Body: {email.body}
+# ```
+# """
+#     return preview
 
 
 def format_email_header(email):
@@ -277,8 +317,9 @@ def scheduler_check_emails():
     
     if emails:
         for email in emails:
-
-            ai_summary = format_email_summary_only(email)
+            summary = get_email_summary(clean_html(email.body))
+            publish_card("Email", email, summary)
+            ai_summary = format_email_summary_only(email, summary)
             email.mark_as_read()
             return ai_summary
     return None
@@ -290,32 +331,71 @@ def publish(message):
     message = encode_message("prompt", message)
     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
+def publish_list(message,strings_values):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        cards = create_list_card(message,strings_values)
+        #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message("cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
+def publish_card(message,email,summary):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        cards = create_email_card(message,email,summary)
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message("cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
 
 class MSSearchEmailsId(BaseTool):
     name = "SEARCH_EMAILS_RETURN_IDS"
     description = """useful for when you need to search through emails and get their IDs.
+    This tool only returns 5 emails maximum.
     To use the tool you must provide the following search parameter "query"
     query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
     """
-    #return_direct= False
-    def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    return_direct= True
+    def _run(self, query: str, index: int = 1, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             print(query)
             emails = search_emails_return_unique_conv(query)
             #response = validate_response(emails)
             ai_summary = ""
-            human_summary = ""
+            human_summary = []
             if emails:
                 for email in emails:
-                    ai_summary = ai_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
-                    human_summary = human_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + "\n"
-                publish(human_summary)
+                    ai_summary = ai_summary + "From: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
+                    #human_summary.append(email['from'] + ": " + email['subject'] + ", EmailID: " + email['object_id'])
+                    title = email['from'] + ": " + email['subject']
+                    value = "Please use the GET_EMAIL_CHAIN using EmailID: " + email['object_id']
+                    human_summary.append((title, value))
+                #Attempt at sending cards
+                #create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
+                
+                publish_list(f"Choose an option:", human_summary)
+                
             else:
                 return "No emails found"
 
-            notify_channel.close()
-            return ai_summary
+            #return ai_summary
+            return "Let me know if their is anything else I can do."
 
         except Exception as e:
             traceback.print_exc()
@@ -325,44 +405,45 @@ class MSSearchEmailsId(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("SEARCH_EMAILS does not support async")
 
-class MSSearchEmails(BaseTool):
-    name = "SEARCH_EMAILS"
-    description = """useful for when you need to search through emails and get summaries.
-    To use the tool you must provide the following search parameter "query"
-    query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
-    """
-    #return_direct= True
-    def _run(self, query: str, notify: bool = True, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
-        try:
-            print(query)
-            emails = search_emails_return_unique_conv(query)
-            ai_summary = ""
-            human_summary = ""
-            if emails:
-                for email in emails:
-                    summary = summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
-                    human_summary = human_summary + " - Sender: " + email['from'] + ", Subject: " + email['subject'] + "\n"
-                if notify:
-                    publish(human_summary)
-                response = []
-                for email in emails:
-                    email_chain = get_email_chain(email['conversationid'])
-                    response.append(email_chain)
-                    publish(email_chain)
-            else:
-                return "No emails found"  
+# class MSSearchEmails(BaseTool):
+#     name = "SEARCH_EMAILS"
+#     description = """useful for when you need to search through emails and get summaries.
+#     To use the tool you must provide the following search parameter "query"
+#     query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
+#     """
+#     #return_direct= True
+#     def _run(self, query: str, notify: bool = True, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+#         """Use the tool."""
+#         try:
+#             print(query)
+#             emails = search_emails_return_unique_conv(query)
+#             ai_summary = ""
+#             human_summary = []
+#             if emails:
+#                 for email in emails:
+#                     summary = summary + "From: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
+#                     human_summary.append(email['from'] + ", Subject: " + email['subject'])
+#                      #Attempt at sending cards
                 
-            notify_channel.close()
-            return ai_summary
+#                 if notify:
+#                     publish_card(f"{len(emails)} Email/s", human_summary)
+#                 response = []
+#                 for email in emails:
+#                     email_chain = get_email_chain(email['conversationid'])
+#                     response.append(email_chain)
+#                     publish(email_chain)
+#             else:
+#                 return "No emails found"  
+                
+#             return ai_summary
             
-        except Exception as e:
-            traceback.print_exc()
-            return f'To use the tool you must provide the following search parameter "query" and "index"'
+#         except Exception as e:
+#             traceback.print_exc()
+#             return f'To use the tool you must provide the following search parameter "query" and "index"'
     
-    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
-        """Use the tool asynchronously."""
-        raise NotImplementedError("SEARCH_EMAILS_RETURN_SUMMARY does not support async")
+#     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+#         """Use the tool asynchronously."""
+#         raise NotImplementedError("SEARCH_EMAILS_RETURN_SUMMARY does not support async")
 
 class MSGetEmailDetail(BaseTool):
     name = "GET_EMAIL_CHAIN"
@@ -373,19 +454,27 @@ class MSGetEmailDetail(BaseTool):
     Be careful to always use double quotes for strings in the json string
     Returns email headers and the body. 
     """
-    #return_direct= True
+    return_direct= True
     def _run(self, EmailID: str = None, ConversationID: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
            
             if EmailID is not None:
-                response = get_email(EmailID)
-            if ConversationID is not None:
-                response = get_email_chain(ConversationID)
-            publish(response)
-            
+                #response = get_email(EmailID)
+                email = get_message(EmailID)
 
-            return response
+            if ConversationID is not None:
+                #response = get_email_chain(ConversationID)
+                email = get_conversation(ConversationID)
+
+            if email:
+                summary = get_email_summary(clean_html(email.body))
+                publish_card("Email", email, summary)
+                ai_summary = format_email_summary_only(email, summary)
+                return "Let me know if their is anything else I can do."
+            
+            return "No emails"
+
         except Exception as e:
             traceback.print_exc()
             return f'To use the tool you must provide one of the following parameters "EmailID" or "ConversationID"'
@@ -495,8 +584,10 @@ class MSAutoReplyToEmail(BaseTool):
     def _run(self, ConversationID: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            email_chain = get_email_chain(ConversationID)
-            email_response = reply_to_email_summary(email_chain)
+            email_chain = get_conversation(ConversationID)
+            summary = get_email_summary(clean_html(email.body))
+            email_response = reply_to_email_summary(summary)
+
             response = create_email_reply(ConversationID, email_response)
             return validate_response(response)
         except Exception as e:

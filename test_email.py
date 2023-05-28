@@ -1,6 +1,6 @@
 import json
 from datetime import date, timedelta
-from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSSearchEmails, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
+from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
 from bots.utils import create_email
 #from bots.loaders.outlook import get_email_summary
 
@@ -9,19 +9,18 @@ if __name__ == "__main__":
     
     test_create = MSCreateEmail()
     test_get_detail = MSGetEmailDetail()
-    test_search = MSSearchEmails()
     test_search_id = MSSearchEmailsId()
     test_auto_reply = MSAutoReplyToEmail()
     test_forward = MSForwardEmail()
 
 #     print("Create Test")
-#     body = '''<p>Hi Zeke,</p>
+#     body = '''<p>Hi Tester,</p>
 
 # <p>This is a test</p>
 
-# <p>Regards, Zeke</p>'''
+# <p>Regards, Bot</p>'''
 
-#     response = test_create._run('zeke.tierney@gmail.com', 'Test email', body)
+#     response = test_create._run('test.test@gmail.com', 'Test email', body)
 #     print(response)
 
     
@@ -29,7 +28,7 @@ if __name__ == "__main__":
     yesterday = date.today() - timedelta(days=1)
     #today = date.today()
     query = f"received:{yesterday.strftime('%d/%m/%Y')}..{date.today().strftime('%d/%m/%Y')}"
-    search_response = test_search._run(query)
+    search_response = test_search_id._run(query)
     print(search_response)
 
     print("Search Test 2")
@@ -58,5 +57,5 @@ if __name__ == "__main__":
     print(search_response)
 
     print("Reply Test 2")
-    response = test_forward._run(ConversationID = search_response['emails']['conversationid'], recipient='zeke.gmail@gmail.com', body='test')
+    response = test_forward._run(ConversationID = search_response['emails']['conversationid'], recipient='test.test@gmail.com', body='test')
     print(response)

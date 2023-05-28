@@ -1,0 +1,94 @@
+
+{
+  "type": "AdaptiveCard",
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "version": "1.4",
+  "body": [
+    {
+      "type": "Container",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "Email Notifications",
+          "weight": "Bolder",
+          "size": "Medium"
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "From: andrea.marsh@sgcontrols.com.au",
+          "wrap": true
+        },
+        {
+          "type": "TextBlock",
+          "text": "Subject: Alcohol Consumption",
+          "wrap": true
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "From: julian.hill@sgcontrols.com.au",
+          "wrap": true
+        },
+        {
+          "type": "TextBlock",
+          "text": "Subject: Re: Project Hours and Performance checks",
+          "wrap": true
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "From: mobilisation@sgcontrols.com.au",
+          "wrap": true
+        },
+        {
+          "type": "TextBlock",
+          "text": "Subject: FW: 1209 - Travel Reservation to EMERALD, AUSTRALIA on May 28 for MR CHOONG ZHENG EG",
+          "wrap": true
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "From: azuredevops@microsoft.com",
+          "wrap": true
+        },
+        {
+          "type": "TextBlock",
+          "text": "Subject: PR - Document request web forms - SGControls 560 (Isuru Gunathilake)",
+          "wrap": true
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "From: morgan.gee@sgcontrols.com.au",
+          "wrap": true
+        },
+        {
+          "type": "TextBlock",
+          "text": "Subject: Delivery Notification List",
+          "wrap": true
+        }
+      ]
+    }
+  ]
+}

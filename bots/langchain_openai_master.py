@@ -16,8 +16,8 @@ from bots.langchain_todo import TaskBot
 #from bots.langchain_search import SearchBot
 from bots.langchain_browser import WebBot
 from bots.langchain_memory import MemoryBotRetrieveAll, MemoryBotStore, MemoryBotSearch, MemoryBotDelete, MemoryBotUpdate
-from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSSearchEmails, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
-from bots.loaders.calendar import MSGetCalendarEvents
+from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
+from bots.loaders.calendar import MSGetCalendarEvents, MSGetCalendarEvent
 from bots.langchain_planner import PlannerBot
 from bots.langchain_outlook import EmailBot
 from bots.langchain_peformance import ReviewerBot
@@ -26,6 +26,12 @@ from bots.loaders.outlook import MSCreateEmail
 from bots.loaders.todo import scheduler_check_tasks
 from bots.loaders.outlook import scheduler_check_emails
 from bots.utils import encode_message, decode_message
+from botbuilder.schema import (
+    ActionTypes,
+    CardImage,
+    CardAction
+)
+
 
 from langchain.experimental import AutoGPT
 from langchain.experimental import BabyAGI
@@ -76,8 +82,9 @@ def get_plan_input(question):
     timeout = time.time() + 60*5   # 1 minutes from now
     #Calculate plan
     plan = plannerBot.model_response(question, tools)
-    publish(plan)
-    publish("Would you like to make any changes to the plan above? otherwise type 'continue' to proceed or 'pass' to cancel.")
+    #publish(plan)
+    publish_action(plan,"continue","pass")
+    publish("Would you like to make any changes to the plan above?")
     #loop until human happy with plan
     #contents = []
     while True:
@@ -93,8 +100,8 @@ def get_plan_input(question):
             else:
                 new_prompt = f"Update the following plan: {plan} using the following input: {question}"
                 plan = plannerBot.model_response(new_prompt, tools)
-                publish(plan)
-                publish("Would you like to make any changes to the plan above? otherwise type 'continue' to proceed or 'pass' to cancel.")
+                publish_action(plan,"continue","pass")
+                publish("Would you like to make any changes to the plan above?")
                 timeout = time.time() + 60*5
         if time.time() > timeout:
             return "stop"
@@ -119,6 +126,10 @@ def model_response():
                 response = f"Memory: {len(memory.buffer)}\n{memory.buffer}"
                 
                 publish(response)
+                #return response
+            elif question == 'action':
+                response = "test action"
+                publish_action(response,"continue","pass")
                 #return response
             else:
                 current_date_time = datetime.now() 
@@ -158,6 +169,26 @@ def publish(message):
     print(message)
     notify_channel.close()
 
+def publish_action(message, button1, button2):
+    actions = [CardAction(
+        type=ActionTypes.im_back,
+        title=button1,
+        value=button1,
+    ),
+    CardAction(
+        type=ActionTypes.im_back,
+        title=button2,
+        value=button2,
+    )]
+    actions = [action.__dict__ for action in actions] if actions else []
+    message = encode_message('action', message, actions)
+    notify_channel = connection.channel()
+    notify_channel.basic_publish(exchange='',
+                      routing_key='notify',
+                      body=message)
+    print(message)
+    notify_channel.close()
+
 def process_task_schedule():
     task = scheduler_check_tasks(config.Todo_BotsTaskFolder)
     if not task:
@@ -177,28 +208,29 @@ def process_task_schedule():
 
 def process_email_schedule():
     email = scheduler_check_emails()
-    if not email:
-        print("No emails")
-    else:
-        publish("Looks like I have recieved an email.")
-        publish(email)
-        current_date_time = datetime.now() 
-        try:
-            prompt = f'''Given the following email, Suggest actions or a reply that could be used to respond to the email below:
-            {email}'''
-            plan = get_plan_input(prompt)
-            if plan != "stop":
-                message_channel.basic_publish(exchange='',routing_key='message',body=plan)
-            else:
-                publish("Ok, let me know if I can be of assistance.")
-        #     response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
-        except Exception as e:
-            publish( f"An exception occurred: {e}")
-        # #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
-        # print(f"process schedule: {response}")
-        # task.body = task.body + "\n" + response
-        # task.mark_completed()
-        # task.save()
+    # if not email:
+    #     print("No emails")
+    # else:
+    #     publish("Looks like I have recieved an email.")
+    #     publish(email)
+    #     current_date_time = datetime.now() 
+    #     try:
+    #         prompt = f'''Given the following email, Suggest actions or a reply that could be used to respond to the email below:
+    #         {email}'''
+    #         plan = get_plan_input(prompt)
+    #         if plan != "stop":
+                
+    #             message_channel.basic_publish(exchange='',routing_key='message',body=plan)
+    #         else:
+    #             publish("Ok, let me know if I can be of assistance.")
+    #     #     response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
+    #     except Exception as e:
+    #         publish( f"An exception occurred: {e}")
+    #     # #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
+    #     # print(f"process schedule: {response}")
+    #     # task.body = task.body + "\n" + response
+    #     # task.mark_completed()
+    #     # task.save()
 
 def consume():
     message_channel = connection.channel()
@@ -273,6 +305,7 @@ def load_chads_tools(llm) -> list():
     tools.append(MSGetEmailDetail())
 
     tools.append(MSGetCalendarEvents())
+    tools.append(MSGetCalendarEvent())
 
     #tools.append(PlannerBot())
     tools.append(TaskBot())

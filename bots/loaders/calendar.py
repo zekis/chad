@@ -14,6 +14,8 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
+from teams.card_factories import create_list_card, create_event_card
+from bots.utils import encode_message, decode_message
 from bots.utils import validate_response, parse_input
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
@@ -63,8 +65,50 @@ def search_calendar(start_date, end_date):
     q.chain('and').on_attribute('end').less_equal(end_date)
 
     events = calendar.get_events(query=q, include_recurring=True)  # include_recurring=True will include repeated events on the result set.
-    return events
 
+    if events:
+        return events
+    return None
+
+def get_event(eventID):
+    account = authenticate()
+    schedule = account.schedule()
+    calendar = schedule.get_default_calendar()
+    print(calendar.name)
+
+    event = calendar.get_event(eventID)  # include_recurring=True will include repeated events on the result set.
+    return event
+
+def publish_list(message,strings_values):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        cards = create_list_card(message,strings_values)
+        #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message("cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
+def publish_card(message,event):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        cards = create_event_card(message,event)
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message("cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
 class MSGetCalendarEvents(BaseTool):
     name = "GET_CALENDAR_EVENTS"
@@ -73,7 +117,7 @@ class MSGetCalendarEvents(BaseTool):
     Be careful to always use double quotes for strings in the json string 
     """
 
-    #return_direct= True
+    return_direct= True
     def _run(self, start_date: str, end_date: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
@@ -82,19 +126,63 @@ class MSGetCalendarEvents(BaseTool):
             notify_channel.queue_declare(queue='notify')
             
             ai_summary = ""
-            human_summary = ""
+            human_summary = []
 
             events = search_calendar(start_date, end_date)
             if events:
                 for event in events:
                     ai_summary = ai_summary + " - Event: " + event.subject + ", At " + event.start.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
-                    human_summary = human_summary + " - Event: " + event.subject + ", At " + event.start.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
+                    #human_summary = human_summary + " - Event: " + event.subject + ", At " + event.start.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
+                    title = event.subject + " - " + event.start.strftime("%A, %B %d, %Y at %I:%M %p")
+                    value = "Please use the GET_CALENDAR_EVENT tool using ID: " + event.object_id
+                    human_summary.append((title, value))
                 
-                notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
+                title_message = f"Events Scheduled {start_date} - {end_date}"
+                publish_list(title_message, human_summary)
+                #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
             else:
                 return "No events"
             
-            return ai_summary
+            #return ai_summary
+            return "Let me know if their is anything else I can do."
+        except Exception as e:
+            traceback.print_exc()
+            return f'To use the tool you must provide the following parameters "start_date" "end_date"'
+    
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("GET_CALENDAR_EVENTS does not support async")
+
+class MSGetCalendarEvent(BaseTool):
+    name = "GET_CALENDAR_EVENT"
+    description = """useful for when you need to retrieve a single meeting or appointment
+    To use the tool you must provide the following parameter "eventID"
+    Be careful to always use double quotes for strings in the json string 
+    """
+
+    return_direct= True
+    def _run(self, eventID: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        """Use the tool."""
+        try:
+            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            notify_channel = connection.channel()
+            notify_channel.queue_declare(queue='notify')
+            
+            ai_summary = ""
+            human_summary = []
+
+            event = get_event(eventID)
+            if event:
+                ai_summary = ai_summary + " - Event: " + event.subject + ", At " + event.start.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
+                title_message = f"Event"
+                publish_card(title_message, event)
+                #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
+                return "Let me know if their is anything else I can do."
+            
+            
+            return "No events"
+            
+            
         except Exception as e:
             traceback.print_exc()
             return f'To use the tool you must provide the following parameters "start_date" "end_date"'
