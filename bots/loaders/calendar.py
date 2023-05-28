@@ -174,7 +174,7 @@ class MSGetCalendarEvent(BaseTool):
             event = get_event(eventID)
             if event:
                 ai_summary = ai_summary + " - Event: " + event.subject + ", At " + event.start.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
-                title_message = f"Event"
+                title_message = f"Event Review"
                 publish_card(title_message, event)
                 #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
                 return "Let me know if their is anything else I can do."

@@ -83,22 +83,34 @@ class TeamsConversationBot(ActivityHandler):
     
     async def on_turn(self, turn_context: TurnContext):
         if turn_context.activity.value:
+            print(f"Got Activity: {turn_context.activity}")
             # Get the input value. This will be in turn_context.activity.value['acDecision'].
             selected_value = turn_context.activity.value['acDecision']
+            suggestions_value = turn_context.activity.value.get('suggestions', None)
             # You can then use the selected value to trigger the imBack event.
             if selected_value:
-                feedback = f"Please provide more information for {selected_value}"
-                self.message_channel.basic_publish(exchange='',routing_key='message',body=feedback)
-                print(selected_value)
+                
+                if suggestions_value:
+                    print(selected_value)
+                    print(suggestions_value)
+                    feedback = f"user_improvements: {suggestions_value}, {selected_value}"
+                    self.send(feedback)
+                else:
+                    print(selected_value)
+                    feedback = f"{selected_value}"
+                    self.send(feedback)
+            return await turn_context.send_activities([
+                    Activity(
+                        type=ActivityTypes.typing
+                    )])
         else:
+            print(f"No Activity: {turn_context.activity}")
             return await self.on_message_activity(turn_context)
 
     async def on_message_activity(self, turn_context: TurnContext):
         global process
         self._add_conversation_reference(turn_context.activity)
         #TurnContext.remove_recipient_mention(turn_context.activity)
-        
-
         
         text = turn_context.activity.text
         if text:
@@ -121,8 +133,6 @@ class TeamsConversationBot(ActivityHandler):
                 #process = subprocess.Popen(['python', 'ai.py'])
                 #return
 
-            
-                
 
             elif text.lower() == "start":
                 #start the bot
@@ -184,6 +194,13 @@ class TeamsConversationBot(ActivityHandler):
         message = encode_message("prompt", message)
         notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
+    def send(self, message):
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        message_channel = connection.channel()
+        message_channel.queue_declare(queue='notify')
+        message = encode_message("prompt", message)
+        message_channel.basic_publish(exchange='',routing_key='message',body=message)
+
 
     async def process_message(self, ADAPTER):
         for conversation_reference in self.conversation_references.values():
@@ -221,19 +238,20 @@ class TeamsConversationBot(ActivityHandler):
                     )
                 elif type == "cards":
                     #actions = message_dict.get('actions')
-                    card_data = json.loads(data)
-                    message = Activity(
-                        type=ActivityTypes.message,
-                        attachments=[CardFactory.adaptive_card(card_data)]
-                        
-                    )
-                    ##teams_actions = self.get_actions(body, actions)
-                    #conversation_reference = TurnContext.
-                    await ADAPTER.continue_conversation(
-                        conversation_reference,
-                        lambda turn_context: turn_context.send_activity(message),
-                        self._app_id,
-                    )
+                    if data:
+                        card_data = json.loads(data)
+                        message = Activity(
+                            type=ActivityTypes.message,
+                            attachments=[CardFactory.adaptive_card(card_data)]
+                            
+                        )
+                        ##teams_actions = self.get_actions(body, actions)
+                        #conversation_reference = TurnContext.
+                        await ADAPTER.continue_conversation(
+                            conversation_reference,
+                            lambda turn_context: turn_context.send_activity(message),
+                            self._app_id,
+                        )
     
     def create_hero_card(self, prompt, actions) -> Attachment:
         card = HeroCard(
@@ -244,5 +262,5 @@ class TeamsConversationBot(ActivityHandler):
         return CardFactory.hero_card(card)
                         
 
-    def create_adaptive_card(self) -> Attachment:
-        return CardFactory.adaptive_card(ADAPTIVE_CARD_CONTENT)
+    # def create_adaptive_card(self) -> Attachment:
+    #     return CardFactory.adaptive_card(ADAPTIVE_CARD_CONTENT)

@@ -14,7 +14,7 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
-from teams.card_factories import create_list_card, create_email_card
+from teams.card_factories import create_list_card, create_email_card, create_draft_reply_email_card, create_draft_forward_email_card, create_draft_email_card
 from bots.utils import encode_message, decode_message
 from bots.utils import validate_response, parse_input, sanitize_email
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
@@ -45,11 +45,8 @@ from langchain.schema import (
 
 
 load_dotenv(find_dotenv())
-
 embeddings = OpenAIEmbeddings()
 
-
-     
 
 ### With your own identity (auth_flow_type=='credentials') ####
 def authenticate():
@@ -67,31 +64,47 @@ def get_email_summary(email):
     print(f"Function Name: get_email_summary | Query: {query}")
     return chat([HumanMessage(content=query)]).content
 
-def reply_to_email_summary(summary):
+def reply_to_email_summary(summary, comments=None, previous_draft=None):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this email summary: {summary}, please create a reasonable email response from the perspective of {config.OFFICE_USER}.
-    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end."""
+    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
+    """
+    if comments:
+        query += f"Consider the following comments: {comments}"
+    if previous_draft:
+        query += f"Based on the previous draft: {previous_draft}"
+
     email_response = chat([HumanMessage(content=query)]).content
     print(f"Function Name: reply_to_email_summary | Query: {query}")
     return email_response
 
-# def get_email_chain(ConversationID):
-#     account = authenticate()
-#     mailbox = account.mailbox()
-#     inbox = mailbox.inbox_folder()
+def forward_email_summary(summary, comments=None, previous_draft=None):
+    chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+    query = f"""Given this email summary: {summary}, please create a reasonable email from the perspective of {config.OFFICE_USER}.
+    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
+    """
+    if comments:
+        query += f"Consider the following comments: {comments}"
+    if previous_draft:
+        query += f"Based on the previous draft: {previous_draft}"
 
-#     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
-#     print(f"Function Name: get_email_chain | Query: {query}")
-#     emails = inbox.get_messages(limit=5,query=query)
-    
-#     count = 0
-#     if emails:
-#         final_response = ""
-#         for email in emails:
-#             count = count + 1
-#             final_response = final_response + format_email_summary_only(email)
-#         return final_response
-#     return None
+    email_response = chat([HumanMessage(content=query)]).content
+    print(f"Function Name: forward_email_summary | Query: {query}")
+    return email_response
+
+def modify_draft(body, comments, previous_draft=None):
+    chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+    query = f"""Given this request: {body}, please create a reasonable email from the perspective of {config.OFFICE_USER}
+    Email is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
+    """
+    if comments:
+        query += f"Consider the following comments: {comments}"
+    if previous_draft:
+        query += f"Based on the previous draft: {previous_draft}"
+
+    email_response = chat([HumanMessage(content=query)]).content
+    print(f"Function Name: modify_draft | Query: {query}")
+    return email_response
 
 def get_conversation(ConversationID):
     account = authenticate()
@@ -117,17 +130,6 @@ def get_message(ObjectID):
     # Fetches a single email matching the given `ObjectID` from the inbox.
     returned_email = inbox.get_message(ObjectID)
     return returned_email
-
-# # This function takes an `ObjectID` as input and returns the email associated with that ID.
-# def get_email(ObjectID):
-#     print(f"Function Name: get_email | ObjectID: {ObjectID}")
-#     account = authenticate()
-#     mailbox = account.mailbox()
-#     inbox = mailbox.inbox_folder()
-#     # Fetches a single email matching the given `ObjectID` from the inbox.
-#     email = inbox.get_message(ObjectID)
-#     final_response = format_email(email)        
-#     return final_response
 
 def mark_read(ObjectID):
     print(f"Function Name: mark_read | ObjectID: {ObjectID}")
@@ -175,7 +177,7 @@ def search_emails(search_query):
         return emails
     return None
 
-def create_email_reply(ConversationID, body):
+def create_email_reply(ConversationID, body, save=False):
     print(f"Function Name: create_email_reply | Conversation ID: {ConversationID} | Body: {body}")
     account = authenticate()
     mailbox = account.mailbox()
@@ -191,10 +193,12 @@ def create_email_reply(ConversationID, body):
 
     reply_msg.body = body
 
-    reply_msg.save_draft()
-    return "Email Reply Created"
+    if save:
+        reply_msg.save_draft()
 
-def create_email_forward(ConversationID, recipient, body):
+    return reply_msg
+
+def create_email_forward(ConversationID, recipient, body, save=False):
     print(f"Function Name: create_email_forward | Conversation ID: {ConversationID} | Recipient: {recipient} | Body: {body}")
     account = authenticate()
     mailbox = account.mailbox()
@@ -213,27 +217,36 @@ def create_email_forward(ConversationID, recipient, body):
     reply_msg.to.add(recipient)
     reply_msg.body = body
     
-    reply_msg.save_draft()
-    return "Forward Email Created"
+    if save:
+        reply_msg.save_draft()
+
+    return reply_msg
 
 
-def draft_email(recipient, subject, body):
+def draft_email(recipient, subject, body, user_improvements=None, previous_draft=None, save=True):
     print(f"Function Name: draft_email | Recipient: {recipient} | Subject: {subject}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
 
     if body or body != "":
+
+        if user_improvements:
+            body = modify_draft(body, user_improvements)
+            if previous_draft:
+                body = modify_draft(body, user_improvements, previous_draft)
+
         message = mailbox.new_message()
         message.to.add(recipient)
         message.subject = subject
+        
         message.body = body
-        message.save_draft()
-        publish_card("Draft Email", message, message.body)
-        publish(preview_email(message))
-        return "Email Created and Sent"
-    else:
-        return "email must contain a body. Perhaps work out what content you need to send first"
+
+        if save:
+            message.save_draft()
+        
+        return message
+    
 
 def clean_html(html):
     remove_strings = [
@@ -289,17 +302,6 @@ Summary: {summary}
 """
     return email_s
 
-# def preview_email(email):
-#     clean_email = ""
-#     preview = f"""```
-# To: {', '.join([recipient.address for recipient in email.to[:5]])}
-# Subject: {email.subject}
-# Body: {email.body}
-# ```
-# """
-#     return preview
-
-
 def format_email_header(email):
     header = { 'object_id': email.object_id, 'conversationid': email.conversation_id, 'subject': email.subject, 'from': email.sender.address }
     return header
@@ -319,9 +321,9 @@ def scheduler_check_emails():
         for email in emails:
             summary = get_email_summary(clean_html(email.body))
             publish_card("Email", email, summary)
-            ai_summary = format_email_summary_only(email, summary)
-            email.mark_as_read()
-            return ai_summary
+            #ai_summary = format_email_summary_only(email, summary)
+            #email.mark_as_read()
+            #return ai_summary
     return None
 
 def publish(message):
@@ -362,6 +364,38 @@ def publish_card(message,email,summary):
     message = encode_message("cards", message, cards)
     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
+def publish_draft_card(message,email,response, reply=False):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        if reply:
+            cards = create_draft_reply_email_card(message,email,response)
+        else:
+            cards = create_draft_email_card(message,email,response)
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message("cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
+def publish_draft_forward_card(message,email,response):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        cards = create_draft_forward_email_card(message,email,response)
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message("cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
 class MSSearchEmailsId(BaseTool):
     name = "SEARCH_EMAILS_RETURN_IDS"
@@ -395,7 +429,7 @@ class MSSearchEmailsId(BaseTool):
                 return "No emails found"
 
             #return ai_summary
-            return "Let me know if their is anything else I can do."
+            return "Let me know if there is anything else I can do."
 
         except Exception as e:
             traceback.print_exc()
@@ -404,46 +438,6 @@ class MSSearchEmailsId(BaseTool):
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
         raise NotImplementedError("SEARCH_EMAILS does not support async")
-
-# class MSSearchEmails(BaseTool):
-#     name = "SEARCH_EMAILS"
-#     description = """useful for when you need to search through emails and get summaries.
-#     To use the tool you must provide the following search parameter "query"
-#     query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
-#     """
-#     #return_direct= True
-#     def _run(self, query: str, notify: bool = True, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-#         """Use the tool."""
-#         try:
-#             print(query)
-#             emails = search_emails_return_unique_conv(query)
-#             ai_summary = ""
-#             human_summary = []
-#             if emails:
-#                 for email in emails:
-#                     summary = summary + "From: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
-#                     human_summary.append(email['from'] + ", Subject: " + email['subject'])
-#                      #Attempt at sending cards
-                
-#                 if notify:
-#                     publish_card(f"{len(emails)} Email/s", human_summary)
-#                 response = []
-#                 for email in emails:
-#                     email_chain = get_email_chain(email['conversationid'])
-#                     response.append(email_chain)
-#                     publish(email_chain)
-#             else:
-#                 return "No emails found"  
-                
-#             return ai_summary
-            
-#         except Exception as e:
-#             traceback.print_exc()
-#             return f'To use the tool you must provide the following search parameter "query" and "index"'
-    
-#     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
-#         """Use the tool asynchronously."""
-#         raise NotImplementedError("SEARCH_EMAILS_RETURN_SUMMARY does not support async")
 
 class MSGetEmailDetail(BaseTool):
     name = "GET_EMAIL_CHAIN"
@@ -469,9 +463,9 @@ class MSGetEmailDetail(BaseTool):
 
             if email:
                 summary = get_email_summary(clean_html(email.body))
-                publish_card("Email", email, summary)
+                publish_card("Email Review", email, summary)
                 ai_summary = format_email_summary_only(email, summary)
-                return "Let me know if their is anything else I can do."
+                return "Let me know if there is anything else I can do."
             
             return "No emails"
 
@@ -484,20 +478,23 @@ class MSGetEmailDetail(BaseTool):
         raise NotImplementedError("GET_EMAIL_CHAIN does not support async")
 
 
-class MSCreateEmail(BaseTool):
-    name = "CREATE_EMAIL"
-    description = f"""useful for when you need to create a new email.
-    Input should be a json string with three keys: "recipient" "subject" and "body"
-    recipient should be a valid email address.
+class MSDraftEmail(BaseTool):
+    name = "DRAFT_EMAIL"
+    description = f"""useful for when you need to create a draft new email.
+    Input should be a json string with three keys: "recipient" "subject" and "body" and optional "user_improvements" and "previous_draft"
+    recipient should be a valid email address. user_improvements help the human direct the draft email and can be used in combination with the previous_draft.
     body should be html formatted and must include a salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
     Be careful to always use double quotes for strings in the json string 
     """
     return_direct= True
-    def _run(self, recipient: str, subject: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, recipient: str, subject: str, body: str, user_improvements: str = None, previous_draft: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            response = draft_email(recipient, subject, body)
-            return validate_response(response)
+            response = draft_email(recipient, subject, body, user_improvements, previous_draft)
+            #email_response = forward_email_summary(summary, user_improvements, previous_draft)
+            publish_draft_card("New Draft Email", response, body, reply=False)
+            response.delete()
+            return "Let me know if there is anything else I can do."
         except Exception as e:
             traceback.print_exc()
             return f'Input should be a json string with three keys: "recipient" "subject" and "body"'
@@ -508,7 +505,7 @@ class MSCreateEmail(BaseTool):
 
 class MSSendEmail(BaseTool):
     name = "SEND_EMAIL"
-    description = f"""useful for when you need to send a new email.
+    description = f"""useful for when you need to send a draft email.
     Input should be a json string with three keys: "recipient" "subject", "body"
     recipient should be a valid email address.
     body should be html formatted must include a salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
@@ -519,8 +516,8 @@ class MSSendEmail(BaseTool):
     def _run(self, recipient: str, subject: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            response = draft_email(recipient, subject, body)
-            return validate_response(response)
+            response = draft_email(recipient, subject, body, save=True)
+            return "Let me know if there is anything else I can do."
         except Exception as e:
             traceback.print_exc()
             return f'Input should be a json string with three keys: "recipient" "subject", "body"'
@@ -541,8 +538,9 @@ class MSReplyToEmail(BaseTool):
     def _run(self, ConversationID: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            response = create_email_reply(ConversationID, body)
-            return validate_response(response)
+            #create a draft email card and sends to the user for approval
+            response = create_email_reply(ConversationID, body, True)
+            return "Email saved - Please manually send from outlook"
         except Exception as e:
             traceback.print_exc()
             return f'To use the tool you must provide the following parameter "subject" "body"'
@@ -553,18 +551,19 @@ class MSReplyToEmail(BaseTool):
 
 class MSForwardEmail(BaseTool):
     name = "FORWARD_EMAIL"
-    description = """useful for when you need to forward an existing email chain.
-    To use the tool you must provide the following parameter "ConversationID" "recipient "body"
+    description = """useful for when you need to create a forward email to an existing email chain.
+    To use the tool you must provide the following parameters "ConversationID" "body" "recipients"
     body should be html formatted must include a salutation and opening line at the start and signature from the sender at the end.
     Be careful to always use double quotes for strings in the json string 
     """
 
     return_direct= True
-    def _run(self, ConversationID: str, recipient: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, ConversationID: str, body: str,recipients: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            response = create_email_forward(ConversationID, recipient, body)
-            return validate_response(response)
+            #create a draft email card and sends to the user for approval
+            forward_email = create_email_forward(ConversationID, recipients, body, True)
+            return "Email saved - Please manually send from outlook"
         except Exception as e:
             traceback.print_exc()
             return f'To use the tool you must provide the following parameter "subject" "body"'
@@ -573,26 +572,59 @@ class MSForwardEmail(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("REPLY_TO_EMAIL does not support async")
 
-class MSAutoReplyToEmail(BaseTool):
-    name = "AUTO_REPLY_TO_EMAIL"
-    description = """useful for when you need to auto reply to an existing email chain.
-    To use the tool you must provide the following parameter "ConversationID"
+class MSDraftForwardEmail(BaseTool):
+    name = "DRAFT_FORWARD_TO_EMAIL"
+    description = """useful for when you need to generate a forward email to an existing email chain.
+    To use the tool you must provide the following parameter "ConversationID" "recipients" and optional "user_improvements" and "previous_draft"
+    user_improvements help the human direct the draft email and can be used in combination with the previous_draft.
     Be careful to always use double quotes for strings in the json string 
     """
 
     return_direct= True
-    def _run(self, ConversationID: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, ConversationID: str, recipients: str, user_improvements: str = None, previous_draft: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             email_chain = get_conversation(ConversationID)
-            summary = get_email_summary(clean_html(email.body))
-            email_response = reply_to_email_summary(summary)
+            summary = get_email_summary(clean_html(email_chain.body))
+            email_response = forward_email_summary(summary, user_improvements, previous_draft)
 
-            response = create_email_reply(ConversationID, email_response)
-            return validate_response(response)
+            forward_email = create_email_forward(ConversationID, recipients, email_response, False)
+            
+            publish_draft_forward_card("New Forward Draft Email", forward_email, email_response)
+            forward_email.delete()
+            return "Let me know if there is anything else I can do."
         except Exception as e:
             traceback.print_exc()
-            return f'To use the tool you must provide the following parameter "ConversationID" "body"'
+            return f'To use the tool you must provide the following parameter "ConversationID" "recipients" and optional "user_improvements" and "previous_draft"'
+    
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("REPLY_TO_EMAIL does not support async")
+
+class MSDraftReplyToEmail(BaseTool):
+    name = "DRAFT_REPLY_TO_EMAIL"
+    description = """useful for when you need to generate a reply to an existing email chain.
+    To use the tool you must provide the following parameter "ConversationID", and optional "user_improvements" and "previous_draft"
+    user_improvements help the human direct the draft email response and can be used in combination with the previous_draft.
+    Be careful to always use double quotes for strings in the json string 
+    """
+
+    return_direct= True
+    def _run(self, ConversationID: str, user_improvements: str = None, previous_draft: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        """Use the tool."""
+        try:
+            email_chain = get_conversation(ConversationID)
+            summary = get_email_summary(clean_html(email_chain.body))
+            email_response = reply_to_email_summary(summary, user_improvements, previous_draft)
+
+            reply_email = create_email_reply(ConversationID, email_response)
+
+            publish_draft_card("New Draft Email", reply_email, email_response, True)
+            reply_email.delete()
+            return "Let me know if there is anything else I can do."
+        except Exception as e:
+            traceback.print_exc()
+            return f'To use the tool you must provide the following parameter "ConversationID", and optional "user_improvements" and "previous_draft"'
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""

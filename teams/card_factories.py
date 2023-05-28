@@ -1,5 +1,7 @@
 import json
 import config
+import markdownify
+
 
 def create_list_card(message,strings_values):
     cards = {
@@ -25,7 +27,7 @@ def create_list_card(message,strings_values):
         "actions": [
             {
                 "type": "Action.Submit",
-                "title": "Review",
+                "title": "Summarise",
                 "id": "btnSummary"
             }
         ]
@@ -94,6 +96,12 @@ def create_email_card(message,email, summary):
                                 "value": email.has_attachments
                             }
                         ]
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "suggestions",
+                        "placeholder": "Help direct the AI by making suggestions",
+                        "label": "Suggestions"
                     }
                 ]
             }
@@ -101,14 +109,286 @@ def create_email_card(message,email, summary):
         "actions": [
             {
                 "type": "Action.Submit",
-                "title": "Draft Reply",
-                "id": "btnDraft"
+                "title": "Draft Reply Email",
+                "data": {
+                    "acDecision": f"Please use the DRAFT_REPLY_TO_EMAIL tool using ConverstationID: {email.conversation_id} to draft a response"
+                }
             },
             {
                 "type": "Action.Submit",
-                "title": "Create Task",
-                "id": "btnTask"
+                "title": "Draft Forward Email",
+                "data": {
+                    "acDecision": f"Please use the DRAFT_FORWARD_TO_EMAIL tool using ConverstationID: {email.conversation_id} to draft a response"
+                }
+                
             }
+
+            
+        ]
+    }
+
+    return json.dumps(cards)
+
+def create_draft_email_card(message,email,response):
+
+    # Convert the list of recipients to a string
+    recipients = ', '.join([recipient.address for recipient in email.to])
+    response_md = h = markdownify.markdownify(response, heading_style="ATX")
+
+    cards = {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+            {
+                "type": "Container",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "size": "medium",
+                        "weight": "Bolder",
+                        "horizontalAlignment": "Left",
+                        "text": message
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": recipients,
+                        "weight": "bolder",
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "spacing": "none",
+                        "text": email.subject,
+                        "isSubtle": True,
+                        "wrap": True
+                    }
+                ]
+            },
+            {
+                "type": "Container",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "text": response_md,
+                        "wrap": True
+                    },
+                    {
+                        "type": "FactSet",
+                        "facts": [
+                            {
+                                "title": "Importance",
+                                "value": email.importance.value
+                            },
+                            {
+                                "title": "Has Attachment",
+                                "value": email.has_attachments
+                            }
+                        ]
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "suggestions",
+                        "placeholder": "Please suggest any changes",
+                        "label": "Suggestions"
+                    }
+
+                ]
+            }
+        ],
+        "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "Send",
+                "data": {
+                    "acDecision": f"Please send an email using the SEND_EMAIL tool to: {recipients}, subject: {email.subject}, body: {response}"
+                },
+                "associatedInputs": "None"
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Modify",
+                "data": {
+                    "acDecision": f"Please use the DRAFT_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
+                }
+            }
+            
+        ]
+    }
+
+    return json.dumps(cards)
+
+
+def create_draft_reply_email_card(message,email,response):
+
+    # Convert the list of recipients to a string
+    recipients = ', '.join([recipient.address for recipient in email.to])
+    response_md = h = markdownify.markdownify(response, heading_style="ATX")
+
+    cards = {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+            {
+                "type": "Container",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "size": "medium",
+                        "weight": "Bolder",
+                        "horizontalAlignment": "Left",
+                        "text": message
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": recipients,
+                        "weight": "bolder",
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "spacing": "none",
+                        "text": email.subject,
+                        "isSubtle": True,
+                        "wrap": True
+                    }
+                ]
+            },
+            {
+                "type": "Container",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "text": response_md,
+                        "wrap": True
+                    },
+                    {
+                        "type": "FactSet",
+                        "facts": [
+                            {
+                                "title": "Importance",
+                                "value": email.importance.value
+                            },
+                            {
+                                "title": "Has Attachment",
+                                "value": email.has_attachments
+                            }
+                        ]
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "suggestions",
+                        "placeholder": "Please suggest any changes",
+                        "label": "Suggestions"
+                    }
+
+                ]
+            }
+        ],
+        "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "Send",
+                "data": {
+                    "acDecision": f"Please send an email using the REPLY_TO_EMAIL tool using ConversationID: {email.conversation_id} with Body: {response}"
+                },
+                "associatedInputs": "None"
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Modify",
+                "data": {
+                    "acDecision": f"Please use the DRAFT_REPLY_TO_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
+                }
+            }
+            
+        ]
+    }
+
+    return json.dumps(cards)
+
+def create_draft_forward_email_card(message,email,response):
+
+    # Convert the list of recipients to a string
+    recipients = ', '.join([recipient.address for recipient in email.to])
+    response_md = h = markdownify.markdownify(response, heading_style="ATX")
+
+    cards = {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+            {
+                "type": "Container",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "size": "medium",
+                        "weight": "Bolder",
+                        "horizontalAlignment": "Left",
+                        "text": message
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": recipients,
+                        "weight": "bolder",
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "spacing": "none",
+                        "text": email.subject,
+                        "isSubtle": True,
+                        "wrap": True
+                    }
+                ]
+            },
+            {
+                "type": "Container",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "text": response_md,
+                        "wrap": True
+                    },
+                    {
+                        "type": "FactSet",
+                        "facts": [
+                            {
+                                "title": "Importance",
+                                "value": email.importance.value
+                            },
+                            {
+                                "title": "Has Attachment",
+                                "value": email.has_attachments
+                            }
+                        ]
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "suggestions",
+                        "placeholder": "Please suggest any changes",
+                        "label": "Suggestions"
+                    }
+
+                ]
+            }
+        ],
+        "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "Send",
+                "data": {
+                    "acDecision": f"Please send an email using the FORWARD_TO_EMAIL tool using ConversationID: {email.conversation_id} to: {recipients}, with Body: {response}"
+                },
+                "associatedInputs": "None"
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Modify",
+                "data": {
+                    "acDecision": f"Please use the DRAFT_FORWARD_TO_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
+                }
+            }
+            
         ]
     }
 

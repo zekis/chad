@@ -16,12 +16,22 @@ from bots.langchain_todo import TaskBot
 #from bots.langchain_search import SearchBot
 from bots.langchain_browser import WebBot
 from bots.langchain_memory import MemoryBotRetrieveAll, MemoryBotStore, MemoryBotSearch, MemoryBotDelete, MemoryBotUpdate
-from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
+from bots.loaders.outlook import (
+    MSSearchEmailsId,
+    MSGetEmailDetail,
+    MSDraftEmail,
+    MSSendEmail,
+    MSReplyToEmail,
+    MSForwardEmail,
+    MSDraftForwardEmail,
+    MSDraftReplyToEmail
+)
+
 from bots.loaders.calendar import MSGetCalendarEvents, MSGetCalendarEvent
 from bots.langchain_planner import PlannerBot
-from bots.langchain_outlook import EmailBot
+#from bots.langchain_outlook import EmailBot
 from bots.langchain_peformance import ReviewerBot
-from bots.loaders.outlook import MSCreateEmail
+
 
 from bots.loaders.todo import scheduler_check_tasks
 from bots.loaders.outlook import scheduler_check_emails
@@ -207,7 +217,7 @@ def process_task_schedule():
         task.save()
 
 def process_email_schedule():
-    email = scheduler_check_emails()
+    scheduler_check_emails()
     # if not email:
     #     print("No emails")
     # else:
@@ -299,10 +309,14 @@ def load_chads_tools(llm) -> list():
     #added the ability for the master to email directly
     #tools.append(MSSearchEmails())
     tools.append(MSSearchEmailsId())
-    tools.append(MSAutoReplyToEmail())
-    tools.append(MSCreateEmail())
-    tools.append(MSForwardEmail())
     tools.append(MSGetEmailDetail())
+    tools.append(MSDraftEmail())
+    tools.append(MSSendEmail())
+    tools.append(MSReplyToEmail())
+    tools.append(MSForwardEmail())
+    tools.append(MSDraftReplyToEmail())
+    tools.append(MSDraftForwardEmail())
+    
 
     tools.append(MSGetCalendarEvents())
     tools.append(MSGetCalendarEvent())

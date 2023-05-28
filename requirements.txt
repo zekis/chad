@@ -13,3 +13,4 @@ O365
 unstructured
 #playwright
 chromadb
+markdownify
