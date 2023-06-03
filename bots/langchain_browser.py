@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional, Type
 
 from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder
 from bots.rabbit_handler import RabbitHandler
+from bots.utils import encode_message, decode_message, generate_response, validate_response, parse_input, sanitize_string
+
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
@@ -36,7 +38,8 @@ from langchain.agents import initialize_agent, AgentType
 
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
-from langchain.text_splitter import CharacterTextSplitter
+from langchain.chains import RetrievalQAWithSourcesChain
+from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
 from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain.document_loaders import WebBaseLoader
@@ -54,8 +57,7 @@ class WebBot(BaseTool):
     Do not use escape characters
     Be careful to always use single quotes for strings in the json string
     """
-    
-    #search = SerpAPIWrapper()
+    return_direct= True
 
     def _run(self, website: str = None, query: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
@@ -67,21 +69,37 @@ class WebBot(BaseTool):
             
             #URL = urllib.parse.quote(website)
             print(f"{website} -> {query}")
-            llm = OpenAI(temperature=0)
-            embeddings = OpenAIEmbeddings()
-            text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+            llm = ChatOpenAI(temperature=0)
+           
+            
+            # text_splitter = RecursiveCharacterTextSplitter(
+            #     # Set a really small chunk size, just to show.
+            #     chunk_size = 100,
+            #     chunk_overlap  = 20,
+            #     length_function = len,
+            # )
             
             loader = WebBaseLoader(website)
-            docs = loader.load()
-            web_texts = text_splitter.split_documents(docs)
+            documents = loader.load()
 
-            web_db = Chroma.from_documents(web_texts, embeddings, collection_name="web")
-            web = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=web_db.as_retriever())
-            response = web.run(query)
+            text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+            splitted_documents  = text_splitter.split_documents(documents)
+
+            embeddings = OpenAIEmbeddings()
+
+            print(f"Web texts: {documents}")
+            try:
+                web_db = Chroma.from_documents(splitted_documents, embeddings, collection_name="web")
+                #web_db.persist()
 
 
-            print(response)
-            return response
+                chain = RetrievalQAWithSourcesChain.from_chain_type(llm=llm, chain_type="stuff", retriever=web_db.as_retriever())
+                response = chain({"question": query}, return_only_outputs=True)
+                self.publish(response)
+                
+                return generate_response(response)
+            except Exception as e:
+                return documents
         except Exception as e:
             traceback.print_exc()
             return """The Input should be a json string with two keys: "website", "query".
@@ -91,3 +109,10 @@ class WebBot(BaseTool):
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
         raise NotImplementedError("BROWSE does not support async")
+
+    def publish(message):
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        notify_channel = connection.channel()
+        notify_channel.queue_declare(queue='notify')
+        message = encode_message("prompt", message)
+        notify_channel.basic_publish(exchange='',routing_key='notify',body=message)

@@ -10,7 +10,7 @@ from http import HTTPStatus
 
 
 from typing import Dict
-from teams.teams_rabbit import messages, process_message
+from teams.teams_rabbit import messages, process_message, tts, default
 
 import asyncio
 import threading
@@ -26,6 +26,8 @@ async def message_queue():
 async def run_server():
     APP = web.Application(middlewares=[aiohttp_error_middleware])
     APP.router.add_post("/api/messages", messages)
+    APP.router.add_static("/", path="./pages/", name="pages")
+    
     runner = web.AppRunner(APP)
     await runner.setup()
     await web.TCPSite(runner, host="localhost", port=config.PORT).start()

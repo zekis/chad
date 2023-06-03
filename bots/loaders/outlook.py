@@ -15,8 +15,8 @@ from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
 from teams.card_factories import create_list_card, create_email_card, create_draft_reply_email_card, create_draft_forward_email_card, create_draft_email_card
-from bots.utils import encode_message, decode_message
-from bots.utils import validate_response, parse_input, sanitize_email
+from bots.utils import encode_message, decode_message, generate_response
+from bots.utils import validate_response, parse_input, sanitize_string
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
@@ -67,7 +67,7 @@ def get_email_summary(email):
 def reply_to_email_summary(summary, comments=None, previous_draft=None):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this email summary: {summary}, please create a reasonable email response from the perspective of {config.OFFICE_USER}.
-    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
+    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start but dont add a signature.
     """
     if comments:
         query += f"Consider the following comments: {comments}"
@@ -81,7 +81,7 @@ def reply_to_email_summary(summary, comments=None, previous_draft=None):
 def forward_email_summary(summary, comments=None, previous_draft=None):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this email summary: {summary}, please create a reasonable email from the perspective of {config.OFFICE_USER}.
-    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
+    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start but dont add a signature.
     """
     if comments:
         query += f"Consider the following comments: {comments}"
@@ -95,7 +95,7 @@ def forward_email_summary(summary, comments=None, previous_draft=None):
 def modify_draft(body, comments, previous_draft=None):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this request: {body}, please create a reasonable email from the perspective of {config.OFFICE_USER}
-    Email is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
+    Email is to be HTML formatted and must include an informal 'To' salutation and opening line at the start but dont add a signature.
     """
     if comments:
         query += f"Consider the following comments: {comments}"
@@ -194,6 +194,7 @@ def create_email_reply(ConversationID, body, save=False):
     reply_msg.body = body
 
     if save:
+        reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
         reply_msg.save_draft()
 
     return reply_msg
@@ -218,9 +219,21 @@ def create_email_forward(ConversationID, recipient, body, save=False):
     reply_msg.body = body
     
     if save:
+        reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
         reply_msg.save_draft()
 
     return reply_msg
+
+def get_signature(file_path):
+    with open(file_path, 'r') as f:
+        contents = f.read()
+
+    #soup = BeautifulSoup(contents, 'html.parser')
+    
+    # Extracting the signature by getting everything inside the body tag
+    #signature = str(soup.body)
+    signature = contents
+    return signature
 
 
 def draft_email(recipient, subject, body, user_improvements=None, previous_draft=None, save=True):
@@ -243,6 +256,7 @@ def draft_email(recipient, subject, body, user_improvements=None, previous_draft
         message.body = body
 
         if save:
+            message.body += get_signature(config.EMAIL_SIGNATURE_HTML)
             message.save_draft()
         
         return message
@@ -322,7 +336,7 @@ def scheduler_check_emails():
             summary = get_email_summary(clean_html(email.body))
             publish_card("Email", email, summary)
             #ai_summary = format_email_summary_only(email, summary)
-            #email.mark_as_read()
+            email.mark_as_read()
             #return ai_summary
     return None
 
@@ -429,7 +443,7 @@ class MSSearchEmailsId(BaseTool):
                 return "No emails found"
 
             #return ai_summary
-            return "Let me know if there is anything else I can do."
+            return generate_response(ai_summary)
 
         except Exception as e:
             traceback.print_exc()
@@ -465,7 +479,7 @@ class MSGetEmailDetail(BaseTool):
                 summary = get_email_summary(clean_html(email.body))
                 publish_card("Email Review", email, summary)
                 ai_summary = format_email_summary_only(email, summary)
-                return "Let me know if there is anything else I can do."
+                return generate_response(ai_summary)
             
             return "No emails"
 
@@ -483,7 +497,6 @@ class MSDraftEmail(BaseTool):
     description = f"""useful for when you need to create a draft new email.
     Input should be a json string with three keys: "recipient" "subject" and "body" and optional "user_improvements" and "previous_draft"
     recipient should be a valid email address. user_improvements help the human direct the draft email and can be used in combination with the previous_draft.
-    body should be html formatted and must include a salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
     Be careful to always use double quotes for strings in the json string 
     """
     return_direct= True
@@ -494,7 +507,7 @@ class MSDraftEmail(BaseTool):
             #email_response = forward_email_summary(summary, user_improvements, previous_draft)
             publish_draft_card("New Draft Email", response, body, reply=False)
             response.delete()
-            return "Let me know if there is anything else I can do."
+            return generate_response(response)
         except Exception as e:
             traceback.print_exc()
             return f'Input should be a json string with three keys: "recipient" "subject" and "body"'
@@ -508,7 +521,6 @@ class MSSendEmail(BaseTool):
     description = f"""useful for when you need to send a draft email.
     Input should be a json string with three keys: "recipient" "subject", "body"
     recipient should be a valid email address.
-    body should be html formatted must include a salutation and opening line at the start and signature from the {config.EMAIL_SIGNATURE} at the end.
     Be careful to always use double quotes for strings in the json string 
     """
 
@@ -517,7 +529,7 @@ class MSSendEmail(BaseTool):
         """Use the tool."""
         try:
             response = draft_email(recipient, subject, body, save=True)
-            return "Let me know if there is anything else I can do."
+            return "Email saved - Please manually send from outlook"
         except Exception as e:
             traceback.print_exc()
             return f'Input should be a json string with three keys: "recipient" "subject", "body"'
@@ -530,7 +542,6 @@ class MSReplyToEmail(BaseTool):
     name = "REPLY_TO_EMAIL"
     description = """useful for when you need to create a reply to an existing email chain.
     To use the tool you must provide the following parameter "ConversationID" "body"
-    body should be html formatted must include a salutation and opening line at the start and signature from the sender at the end.
     Be careful to always use double quotes for strings in the json string 
     """
 
@@ -553,7 +564,6 @@ class MSForwardEmail(BaseTool):
     name = "FORWARD_EMAIL"
     description = """useful for when you need to create a forward email to an existing email chain.
     To use the tool you must provide the following parameters "ConversationID" "body" "recipients"
-    body should be html formatted must include a salutation and opening line at the start and signature from the sender at the end.
     Be careful to always use double quotes for strings in the json string 
     """
 
@@ -592,7 +602,7 @@ class MSDraftForwardEmail(BaseTool):
             
             publish_draft_forward_card("New Forward Draft Email", forward_email, email_response)
             forward_email.delete()
-            return "Let me know if there is anything else I can do."
+            return generate_response(email_response)
         except Exception as e:
             traceback.print_exc()
             return f'To use the tool you must provide the following parameter "ConversationID" "recipients" and optional "user_improvements" and "previous_draft"'
@@ -621,7 +631,7 @@ class MSDraftReplyToEmail(BaseTool):
 
             publish_draft_card("New Draft Email", reply_email, email_response, True)
             reply_email.delete()
-            return "Let me know if there is anything else I can do."
+            return generate_response(email_response)
         except Exception as e:
             traceback.print_exc()
             return f'To use the tool you must provide the following parameter "ConversationID", and optional "user_improvements" and "previous_draft"'

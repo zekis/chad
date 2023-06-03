@@ -13,3 +13,9 @@ Pip Install -r Requirements.txt
 Run teams API with python ./server.py
 
 Then run the Bot using python ./ai.py
+
+
+Documentation
+
+https://adaptivecards.io/explorer/
+

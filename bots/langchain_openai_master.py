@@ -2,7 +2,6 @@ import traceback
 import config
 from datetime import datetime
 from dotenv import find_dotenv, load_dotenv
-import time
 from tempfile import TemporaryDirectory
 import time 
 import pika
@@ -35,6 +34,7 @@ from bots.langchain_peformance import ReviewerBot
 
 from bots.loaders.todo import scheduler_check_tasks
 from bots.loaders.outlook import scheduler_check_emails
+from bots.loaders.git import git_review
 from bots.utils import encode_message, decode_message
 from botbuilder.schema import (
     ActionTypes,
@@ -208,13 +208,14 @@ def process_task_schedule():
         current_date_time = datetime.now() 
         try:
             response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
+        
+            #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
+            print(f"process schedule: {response}")
+            task.body = task.body + "\n" + response
+            task.mark_completed()
+            task.save()
         except Exception as e:
             publish( f"An exception occurred: {e}")
-        #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
-        print(f"process schedule: {response}")
-        task.body = task.body + "\n" + response
-        task.mark_completed()
-        task.save()
 
 def process_email_schedule():
     scheduler_check_emails()
@@ -317,11 +318,12 @@ def load_chads_tools(llm) -> list():
     tools.append(MSDraftReplyToEmail())
     tools.append(MSDraftForwardEmail())
     
+    tools.append(git_review())
 
     tools.append(MSGetCalendarEvents())
     tools.append(MSGetCalendarEvent())
 
-    #tools.append(PlannerBot())
+    tools.append(PlannerBot())
     tools.append(TaskBot())
     
     return tools

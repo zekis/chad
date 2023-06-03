@@ -1,9 +1,20 @@
 import traceback
 import json
 import re
+import config
+import nltk
+import os
+
+
 from typing import Any, Dict, Optional, Type
 from langchain.text_splitter import CharacterTextSplitter
 from botbuilder.schema import ChannelAccount, CardAction, ActionTypes, SuggestedActions
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage
+)
 
 text_splitter = CharacterTextSplitter(        
     separator = "\n\n",
@@ -39,7 +50,7 @@ def sanitize_subject(subject, max_length=150):
     
     return subject
 
-def sanitize_email(body, max_length=2000):
+def sanitize_string(body, max_length=2000):
     # Replace slashes with hyphens
     #subject = subject.replace("/", "-").replace("\\", "-")
     # Remove single quotes
@@ -49,8 +60,8 @@ def sanitize_email(body, max_length=2000):
     return body
 
 def create_email(recipient,subject,body):
-    clean_subject = sanitize_email(subject)
-    clean_body = sanitize_email(body)
+    clean_subject = sanitize_string(subject)
+    clean_body = sanitize_string(body)
     return '{"recipient": "' + recipient + '", "subject": "' + clean_subject + '", "body": "' + clean_body + '"}'
 
 # def encode_message(type, prompt, actions: [CardAction] = None):
@@ -87,3 +98,31 @@ def decode_message(message):
         traceback.print_exc()
         return "prompt", f"error: {e}", None
     
+
+def generate_response(text):
+    chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+    query = f"""given this information, write 2 short paragraph predicting what will happen next, one if everything went well and another if everything went wrong: {text}"""
+    print(f"Function Name: generate_response | Text: {text}")
+    return chat([HumanMessage(content=query)]).content
+
+
+nltk.download("punkt")
+
+def clean_and_tokenize(text):
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'<[^>]*>', '', text)
+    text = re.sub(r'\[.*?\]', '', text)
+    text = re.sub(r'\(.*?\)', '', text)
+    text = re.sub(r'\b(?:http|ftp)s?://\S+', '', text)
+    text = re.sub(r'\W', ' ', text)
+    text = re.sub(r'\d+', '', text)
+    text = text.lower()
+    return nltk.word_tokenize(text)
+
+def format_documents(documents):
+    numbered_docs = "\n".join([f"{i+1}. {os.path.basename(doc.metadata['source'])}: {doc.page_content}" for i, doc in enumerate(documents)])
+    return numbered_docs
+
+def format_user_question(question):
+    question = re.sub(r'\s+', ' ', question).strip()
+    return question

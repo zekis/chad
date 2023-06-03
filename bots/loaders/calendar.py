@@ -15,7 +15,7 @@ from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
 from teams.card_factories import create_list_card, create_event_card
-from bots.utils import encode_message, decode_message
+from bots.utils import encode_message, decode_message, generate_response
 from bots.utils import validate_response, parse_input
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
@@ -144,7 +144,7 @@ class MSGetCalendarEvents(BaseTool):
                 return "No events"
             
             #return ai_summary
-            return "Let me know if their is anything else I can do."
+            return generate_response(ai_summary)
         except Exception as e:
             traceback.print_exc()
             return f'To use the tool you must provide the following parameters "start_date" "end_date"'
@@ -177,7 +177,7 @@ class MSGetCalendarEvent(BaseTool):
                 title_message = f"Event Review"
                 publish_card(title_message, event)
                 #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
-                return "Let me know if their is anything else I can do."
+                return generate_response(ai_summary)
             
             
             return "No events"

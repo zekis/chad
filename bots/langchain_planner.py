@@ -8,6 +8,7 @@ import os
 import re
 import pika
 import faiss
+import time
 
 from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
@@ -86,6 +87,7 @@ class PlannerBot(BaseTool):
             )
             query = f"Given the current data and time of {current_date_time}, {text}"
             response = chatgpt_chain.run(objective=query, tools=tool_details, callbacks=[handler])
+
             return response
         except Exception as e:
             traceback.print_exc()

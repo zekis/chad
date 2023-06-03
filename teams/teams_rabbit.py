@@ -1,10 +1,12 @@
 from dotenv import find_dotenv, load_dotenv
+import os
 import sys
 import traceback
 import uuid
 from datetime import datetime
 from http import HTTPStatus
 from typing import Dict
+
 
 from aiohttp import web
 from aiohttp.web import Request, Response, json_response
@@ -83,6 +85,26 @@ async def messages(req: Request) -> Response:
         return json_response(data=response.body, status=response.status)
     return Response(status=HTTPStatus.OK)
 
+# Listen for incoming requests on /api/messages.
+async def tts(req: Request) -> Response:
+    file_path = 'media.mpeg'
+    return web.FileResponse(file_path)
+
+
+async def default(request):
+    html = """
+    <html>
+        <body>
+            <h1>Welcome to my Web Server!</h1>
+            <p>Here's an audio file for your listening pleasure:</p>
+            <audio controls>
+                <source src="/tts/media.mpeg" type="audio/mpeg">
+                Your browser does not support the audio element.
+            </audio>
+        </body>
+    </html>
+    """
+    return web.Response(text=html, content_type='text/html')
 
 async def process_message():
     await BOT.process_message(ADAPTER)

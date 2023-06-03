@@ -29,6 +29,15 @@ def create_list_card(message,strings_values):
                 "type": "Action.Submit",
                 "title": "Summarise",
                 "id": "btnSummary"
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Read Aloud",
+                "id": "btnReadAloud",
+                "data": {
+                    "create_tts": f"{message}",
+                    "msteams": {"type": "task/fetch"}
+                }
             }
         ]
     }
@@ -121,6 +130,15 @@ def create_email_card(message,email, summary):
                     "acDecision": f"Please use the DRAFT_FORWARD_TO_EMAIL tool using ConverstationID: {email.conversation_id} to draft a response"
                 }
                 
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Read Aloud",
+                "id": "btnReadAloud",
+                "data": {
+                    "create_tts": f"{message}",
+                    "msteams": {"type": "task/fetch"}
+                }
             }
 
             
@@ -209,6 +227,15 @@ def create_draft_email_card(message,email,response):
                 "title": "Modify",
                 "data": {
                     "acDecision": f"Please use the DRAFT_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
+                }
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Read Aloud",
+                "id": "btnReadAloud",
+                "data": {
+                    "create_tts": f"{message}",
+                    "msteams": {"type": "task/fetch"}
                 }
             }
             
@@ -299,6 +326,14 @@ def create_draft_reply_email_card(message,email,response):
                 "data": {
                     "acDecision": f"Please use the DRAFT_REPLY_TO_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
                 }
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Read Aloud",
+                "data": {
+                    "create_tts": f"{message}"
+                }
+                
             }
             
         ]
@@ -387,6 +422,15 @@ def create_draft_forward_email_card(message,email,response):
                 "data": {
                     "acDecision": f"Please use the DRAFT_FORWARD_TO_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
                 }
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Read Aloud",
+                "id": "btnReadAloud",
+                "data": {
+                    "create_tts": f"{message}",
+                    "msteams": {"type": "task/fetch"}
+                }
             }
             
         ]
@@ -436,3 +480,21 @@ def create_event_card(message,event):
     }
 
     return json.dumps(cards)
+
+def create_media_card(message, url):
+    cards = {
+        "type": "AdaptiveCard",
+        "version": "1.6",
+        "fallbackText": "This card requires CaptionSource to be viewed. Ask your platform to update to Adaptive Cards v1.6 for this and more!",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "Text To Speech"
+            },
+            {
+                "type": "",
+                "url": url
+            }
+        ]
+    }
+    return cards

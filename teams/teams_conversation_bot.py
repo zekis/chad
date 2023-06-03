@@ -8,11 +8,13 @@ import json
 import random
 import requests
 import subprocess
-
+import config
+from teams.elevenlabs import speech
+from teams.card_factories import create_media_card
 from typing import List
 from botbuilder.core import ActivityHandler, CardFactory, TurnContext, MessageFactory, ShowTypingMiddleware
 from botbuilder.core.teams import TeamsActivityHandler, TeamsInfo
-from botbuilder.schema import CardAction, HeroCard, Mention, ConversationParameters, Attachment, Activity, ActivityTypes
+from botbuilder.schema import Mention, ConversationParameters, Activity, ActivityTypes
 from botbuilder.schema.teams import TeamInfo, TeamsChannelAccount
 #from botbuilder.schema._connector_client_enums import ActionTypes
 #from bots.model_openai import model_response
@@ -25,8 +27,24 @@ from typing import Dict
 from botbuilder.schema import ChannelAccount, ConversationReference, CardAction, ActionTypes, SuggestedActions
 from botbuilder.schema import (
     ActionTypes,
+    Attachment,
+    HeroCard,
     CardImage,
-    CardAction
+    CardAction,
+    AdaptiveCardInvokeResponse,
+    AdaptiveCardInvokeValue,
+    InvokeResponse
+)
+
+from teams.task_module_response_factory import TaskModuleResponseFactory
+
+from botbuilder.schema.teams import (
+    TaskModuleContinueResponse,
+    TaskModuleRequest,
+    TaskModuleMessageResponse,
+    TaskModuleResponse,
+    TaskModuleTaskInfo,
+    MessagingExtensionResult
 )
 
 thinking_messages = [
@@ -59,7 +77,7 @@ CARDS = [
 ADAPTIVECARDTEMPLATE = "resources/UserMentionCardTemplate.json"
 
 
-class TeamsConversationBot(ActivityHandler):
+class TeamsConversationBot(TeamsActivityHandler):
     
     load_dotenv(find_dotenv())
     # We'll make a temporary directory to avoid clutter
@@ -80,13 +98,104 @@ class TeamsConversationBot(ActivityHandler):
         self._app_id = app_id
         self._app_password = app_password
         #self.ADAPTER = ADAPTER
-    
-    async def on_turn(self, turn_context: TurnContext):
-        if turn_context.activity.value:
+        self.__base_url = config.BASE_URL
+
+    #async def on_teams_task_module_fetch(self, turn_context: TurnContext, task_module_request: TaskModuleRequest) -> TaskModuleResponse:
+
+        # card_task_fetch_value = task_module_request.data.get("create_tts", None)
+        # print(card_task_fetch_value)
+
+        # url = config.BASE_URL + "/tts.html"
+
+        # card = HeroCard(
+        #     text="This is a task module card",
+        #     buttons=[
+        #             CardAction(
+        #                 type=ActionTypes.open_url,
+        #                 title="Go to URL",
+        #                 value=url,
+        #             )
+        #         ],
+        #     )
+
+        # task_info = TaskModuleTaskInfo(
+        #     title="Task",
+        #     card=Attachment(content_type='application/vnd.microsoft.card.hero', content=card)
+        # )
+
+        # continue_response = TaskModuleContinueResponse(value=task_info)
+        # return TaskModuleResponse(task=continue_response)
+        # if card_task_fetch_value:
+        #     print(card_task_fetch_value)
+        #     """Create some audio using ElevenLabs"""
+        #     #speech("media.mpeg", card_task_fetch_value)            
+        #     task_info.url = task_info.fallback_url = url
+        #     task_info.height = 1000
+        #     task_info.width = 700
+        #     task_info.title = "TTS"
+
+        #     continue_response = TaskModuleContinueResponse(value=task_info)
+
+            
+        
+
+
+
+    # async def on_turn(self, turn_context: TurnContext):
+    #     print("sHELLO")
+    #     if turn_context.activity.value:
+    #         print(f"Got Activity: {turn_context.activity}")
+    #         # Get the input value. This will be in turn_context.activity.value['acDecision'].
+    #         selected_value = turn_context.activity.value.get('acDecision', None)
+    #         suggestions_value = turn_context.activity.value.get('suggestions', None)
+            
+    #         # You can then use the selected value to trigger the imBack event.
+    #         if selected_value:
+                
+    #             if suggestions_value:
+    #                 print(selected_value)
+    #                 print(suggestions_value)
+    #                 feedback = f"user_improvements: {suggestions_value}, {selected_value}"
+    #                 self.send(feedback)
+    #             else:
+    #                 print(selected_value)
+    #                 feedback = f"{selected_value}"
+    #                 self.send(feedback)
+
+    #         data = turn_context.activity.value.get('data', None)
+    #         if data:
+    #             create_tts = data.get('create_tts', None)
+    #             """Create some audio using ElevenLabs"""
+    #             #speech("media.mpeg", create_tts)
+    #             task_info = TaskModuleTaskInfo()
+    #             task_info.url = task_info.fallback_url = (config.BASE_URL + "/tts.html")
+
+    #             return TaskModuleResponse(task=TaskModuleMessageResponse(value=task_info))
+
+    #     await super().on_turn(TurnContext)
+
+    #     #     return await turn_context.send_activities([
+    #     #             Activity(
+    #     #                 type=ActivityTypes.typing
+    #     #             )])
+    #     # else:
+    #     #     print(f"No Activity: {turn_context.activity}")
+    #     #     return await self.on_message_activity(turn_context)
+
+    async def on_message_activity(self, turn_context: TurnContext):
+        global process
+        self._add_conversation_reference(turn_context.activity)
+        #TurnContext.remove_recipient_mention(turn_context.activity)
+        #print(turn_context.activity.value)
+        value = turn_context.activity.value
+        text = turn_context.activity.text
+
+        if value:
             print(f"Got Activity: {turn_context.activity}")
             # Get the input value. This will be in turn_context.activity.value['acDecision'].
-            selected_value = turn_context.activity.value['acDecision']
+            selected_value = turn_context.activity.value.get('acDecision', None)
             suggestions_value = turn_context.activity.value.get('suggestions', None)
+            
             # You can then use the selected value to trigger the imBack event.
             if selected_value:
                 
@@ -99,20 +208,12 @@ class TeamsConversationBot(ActivityHandler):
                     print(selected_value)
                     feedback = f"{selected_value}"
                     self.send(feedback)
-            return await turn_context.send_activities([
-                    Activity(
-                        type=ActivityTypes.typing
-                    )])
-        else:
-            print(f"No Activity: {turn_context.activity}")
-            return await self.on_message_activity(turn_context)
 
-    async def on_message_activity(self, turn_context: TurnContext):
-        global process
-        self._add_conversation_reference(turn_context.activity)
-        #TurnContext.remove_recipient_mention(turn_context.activity)
+                return await turn_context.send_activities([
+                        Activity(
+                            type=ActivityTypes.typing
+                        )])
         
-        text = turn_context.activity.text
         if text:
             if text.lower() == "ping":
                 #start the bot
@@ -204,6 +305,8 @@ class TeamsConversationBot(ActivityHandler):
 
     async def process_message(self, ADAPTER):
         for conversation_reference in self.conversation_references.values():
+            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            notify_channel = connection.channel()
             method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
             if body:
                 #print(f"SERVER: {body}")
@@ -240,6 +343,7 @@ class TeamsConversationBot(ActivityHandler):
                     #actions = message_dict.get('actions')
                     if data:
                         card_data = json.loads(data)
+                        print(f"CARD: {card_data}")
                         message = Activity(
                             type=ActivityTypes.message,
                             attachments=[CardFactory.adaptive_card(card_data)]
@@ -264,3 +368,6 @@ class TeamsConversationBot(ActivityHandler):
 
     # def create_adaptive_card(self) -> Attachment:
     #     return CardFactory.adaptive_card(ADAPTIVE_CARD_CONTENT)
+
+
+        
