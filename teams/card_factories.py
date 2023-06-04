@@ -35,8 +35,7 @@ def create_list_card(message,strings_values):
                 "title": "Read Aloud",
                 "id": "btnReadAloud",
                 "data": {
-                    "create_tts": f"{message}",
-                    "msteams": {"type": "task/fetch"}
+                    "create_tts": f"{message}"
                 }
             }
         ]
@@ -136,8 +135,7 @@ def create_email_card(message,email, summary):
                 "title": "Read Aloud",
                 "id": "btnReadAloud",
                 "data": {
-                    "create_tts": f"{message}",
-                    "msteams": {"type": "task/fetch"}
+                    "create_tts": f"{message}"
                 }
             }
 
@@ -234,8 +232,7 @@ def create_draft_email_card(message,email,response):
                 "title": "Read Aloud",
                 "id": "btnReadAloud",
                 "data": {
-                    "create_tts": f"{message}",
-                    "msteams": {"type": "task/fetch"}
+                    "create_tts": f"{message}"
                 }
             }
             
@@ -428,8 +425,7 @@ def create_draft_forward_email_card(message,email,response):
                 "title": "Read Aloud",
                 "id": "btnReadAloud",
                 "data": {
-                    "create_tts": f"{message}",
-                    "msteams": {"type": "task/fetch"}
+                    "create_tts": f"{message}"
                 }
             }
             

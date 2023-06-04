@@ -195,7 +195,7 @@ class TeamsConversationBot(TeamsActivityHandler):
             # Get the input value. This will be in turn_context.activity.value['acDecision'].
             selected_value = turn_context.activity.value.get('acDecision', None)
             suggestions_value = turn_context.activity.value.get('suggestions', None)
-            
+            create_tts = turn_context.activity.value.get('create_tts', None)
             # You can then use the selected value to trigger the imBack event.
             if selected_value:
                 
@@ -213,7 +213,11 @@ class TeamsConversationBot(TeamsActivityHandler):
                         Activity(
                             type=ActivityTypes.typing
                         )])
-        
+            if create_tts:
+                reply = Activity(type=ActivityTypes.message)
+                reply.text = "This is an internet attachment."
+                reply.attachments = [self._get_internet_attachment()]
+                return await turn_context.send_activity(reply)
         if text:
             if text.lower() == "ping":
                 #start the bot
@@ -370,4 +374,13 @@ class TeamsConversationBot(TeamsActivityHandler):
     #     return CardFactory.adaptive_card(ADAPTIVE_CARD_CONTENT)
 
 
-        
+    def _get_internet_attachment(self) -> Attachment:
+        """
+        Creates an Attachment to be sent from the bot to the user from a HTTP URL.
+        :return: Attachment
+        """
+        return Attachment(
+            name="architecture-resize.mpeg",
+            content_type="application/octet-stream",
+            content_url="https://chatbot.tierneymorris.com.au/media.mpeg",
+        )

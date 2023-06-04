@@ -88,18 +88,17 @@ class WebBot(BaseTool):
             embeddings = OpenAIEmbeddings()
 
             print(f"Web texts: {documents}")
-            try:
-                web_db = Chroma.from_documents(splitted_documents, embeddings, collection_name="web")
-                #web_db.persist()
+            
+            web_db = Chroma.from_documents(splitted_documents, embeddings, collection_name="web")
+            #web_db.persist()
 
 
-                chain = RetrievalQAWithSourcesChain.from_chain_type(llm=llm, chain_type="stuff", retriever=web_db.as_retriever())
-                response = chain({"question": query}, return_only_outputs=True)
-                self.publish(response)
-                
-                return generate_response(response)
-            except Exception as e:
-                return documents
+            chain = RetrievalQAWithSourcesChain.from_chain_type(llm=llm, chain_type="stuff", retriever=web_db.as_retriever())
+            response = chain({"question": query}, return_only_outputs=True)
+            self.publish(response)
+            
+            return generate_response(response)
+            
         except Exception as e:
             traceback.print_exc()
             return """The Input should be a json string with two keys: "website", "query".
@@ -110,7 +109,7 @@ class WebBot(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("BROWSE does not support async")
 
-    def publish(message):
+    def publish(self,message):
         connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
         notify_channel = connection.channel()
         notify_channel.queue_declare(queue='notify')
