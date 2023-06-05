@@ -14,6 +14,9 @@ import pickle
 from teams.elevenlabs import speech
 from common.card_factories import create_media_card
 from typing import List
+
+from teams.bot_manager import BotManager
+
 from botbuilder.core import ActivityHandler, CardFactory, TurnContext, MessageFactory, ShowTypingMiddleware, ConversationState, UserState
 from botbuilder.core.teams import TeamsActivityHandler, TeamsInfo
 from botbuilder.schema import Mention, ConversationParameters, Activity, ActivityTypes
@@ -93,7 +96,8 @@ class TeamsConversationBot(TeamsActivityHandler):
     # notify_channel.queue_declare(queue='notify')
     # schedule_channel.queue_declare(queue='schedule')
 
-    process = None
+    #user_processes = {}
+
     #ADAPTER = BotFrameworkAdapter
 
     def __init__(self, app_id: str, app_password: str, conversation_state: ConversationState, user_state: UserState, conversation_references: Dict[str, ConversationReference]):
@@ -109,6 +113,7 @@ class TeamsConversationBot(TeamsActivityHandler):
         self._app_password = app_password
         #self.ADAPTER = ADAPTER
         self.__base_url = config.BASE_URL
+        self.bot_manager = BotManager()
 
         if conversation_state is None:
             raise TypeError(
@@ -147,9 +152,12 @@ class TeamsConversationBot(TeamsActivityHandler):
     ):
         # Get a conversationMember from a team.
         members = await TeamsInfo.get_team_members(turn_context)
+    
+    
+
         
     async def on_message_activity(self, turn_context: TurnContext):
-        global process
+        #global process
         # Get the state properties from the turn context.
         user_profile = await self.user_profile_accessor.get(turn_context, UserProfile)
         conversation_data = await self.conversation_data_accessor.get(turn_context, ConversationData)
@@ -202,30 +210,21 @@ class TeamsConversationBot(TeamsActivityHandler):
                         value=3000
                     )])
                 publish(f"pong", user_id)
-                
-            
 
-            elif text.lower() == "start":
-                #start the bot
-                """start the bot"""
-                publish(f"Starting bot...", user_id)
-                process = subprocess.Popen(['python', 'ai.py', user_id])
+            elif text.lower() == "bot_start":
+                self.bot_manager.handle_command("start", user_id)
                 
-            elif text.lower() == "stop":
-                #stop the bot
-                """stop the bot"""
-                publish(f"Stopping bot...", user_id)
-                process.terminate()
-                publish(f"Stopped", user_id)
+            elif text.lower() == "bot_stop":
+                self.bot_manager.handle_command("stop", user_id)
                 
-            elif text.lower() == "restart":
-                #stop the bot
-                """stop the bot"""
-                publish(f"Stopping bot...", user_id)
-                process.terminate()
-                publish(f"Stopped", user_id)
-                publish(f"Starting bot...", user_id)
-                process = subprocess.Popen(['python', 'ai.py', user_id])
+            elif text.lower() == "bot_restart":
+                self.bot_manager.handle_command("restart", user_id)
+
+            elif text.lower() == "list_bots":
+                self.bot_manager.handle_command("list_bots", user_id)
+                
+            elif text.lower() == "stop_bots":
+                self.bot_manager.handle_command("stop_bots", user_id)
                 
             else:
                 message = random.choice(thinking_messages)
