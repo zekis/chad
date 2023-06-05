@@ -61,11 +61,11 @@ class PlannerBot(BaseTool):
             #prompt = "You are a planner who is an expert at coming up with a todo list."
             #template = "Come up with a todo list for this objective: {text}"
             #chat = OpenAI(temperature=0)
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
+            # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            # notify_channel = connection.channel()
+            # notify_channel.queue_declare(queue='notify')
            
-            handler = RabbitHandler(notify_channel)
+            handler = RabbitHandler()
 
             tool_details = ""
             for tool in tools:

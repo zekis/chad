@@ -16,8 +16,9 @@ from typing import Any, Dict, Optional, Type
 
 from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder
 from bots.rabbit_handler import RabbitHandler
-from bots.utils import encode_message, decode_message, generate_response, validate_response, parse_input, sanitize_string
-
+#from bots.utils import encode_message, decode_message, generate_response, validate_response, parse_input, sanitize_string
+from common.rabbit_comms import publish, publish_list, publish_draft_card, publish_draft_forward_card
+from common.utils import generate_response, generate_whatif_response, generate_plan_response
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
@@ -95,7 +96,7 @@ class WebBot(BaseTool):
 
             chain = RetrievalQAWithSourcesChain.from_chain_type(llm=llm, chain_type="stuff", retriever=web_db.as_retriever())
             response = chain({"question": query}, return_only_outputs=True)
-            self.publish(response)
+            publish(response)
             
             return generate_response(response)
             
@@ -109,9 +110,3 @@ class WebBot(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("BROWSE does not support async")
 
-    def publish(self,message):
-        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-        notify_channel = connection.channel()
-        notify_channel.queue_declare(queue='notify')
-        message = encode_message("prompt", message)
-        notify_channel.basic_publish(exchange='',routing_key='notify',body=message)

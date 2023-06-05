@@ -33,11 +33,11 @@ class ReviewerBot(BaseTool):
         """Use the tool."""
         try:
             print(text)
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
+            # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            # notify_channel = connection.channel()
+            # notify_channel.queue_declare(queue='notify')
 
-            return self.model_response(text, notify_channel)
+            return self.model_response(text)
         except Exception as e:
             return repr(e)
     
@@ -46,7 +46,7 @@ class ReviewerBot(BaseTool):
         raise NotImplementedError("PlannerBot does not support async")
 
     #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
-    def model_response(self, text, response, bot_channel, inital_prompt):
+    def model_response(self, text, response, inital_prompt):
         try:
             #config
             load_dotenv(find_dotenv())
@@ -58,7 +58,7 @@ class ReviewerBot(BaseTool):
             #connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
             #notify_channel = connection.channel()
             #notify_channel.queue_declare(queue='notify')
-            handler = RabbitFeedbackHandler(bot_channel)
+            handler = RabbitFeedbackHandler()
 
             template="""You are a performance reviewer bro who reviews the question, prompts and final response to see if it met the objective.
             You are able to rate the prompt a score of 1 to 10 and provide an improved prompt.

@@ -7,3 +7,5 @@ o365_token.txt
 memory.txt
 /workspace
 data.pickle
+teams/scratch.py
+conversation_references.pkl

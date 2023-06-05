@@ -5,9 +5,10 @@ from dotenv import find_dotenv, load_dotenv
 import sys
 import traceback
 import uuid
-
+import argparse
 from datetime import datetime
-from bots.langchain_openai_master import model_response, process_email_schedule, process_task_schedule, publish
+from bots.langchain_openai_master import model_response, process_email_schedule, process_task_schedule
+from common.rabbit_comms import publish
 
 import asyncio
 import threading
@@ -42,4 +43,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Language Chain Bot")
+    parser.add_argument("user_id", type=str, help="User ID")
+    args = parser.parse_args()
+    config.USER_ID = args.user_id
     asyncio.run(main())

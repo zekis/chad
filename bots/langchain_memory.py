@@ -16,7 +16,8 @@ from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
 #from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder
-from bots.utils import validate_response, parse_input
+from common.utils import validate_response, parse_input
+from common.utils import generate_response, generate_whatif_response, generate_plan_response
 from bots.rabbit_handler import RabbitHandler
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun

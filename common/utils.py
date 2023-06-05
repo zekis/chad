@@ -74,9 +74,31 @@ def create_email(recipient,subject,body):
 #     print(f"ENCODING: {message}")
 #     return json.dumps(message)
 
-def encode_message(type, prompt, actions=None):
+def encode_response(prompt):
+    #actions = [action.__dict__ for action in actions] if actions else []
+    response = {
+        "prompt": prompt
+    }
+    print(f"ENCODING: {response}")
+    return json.dumps(response)
+
+def decode_response(response):
+    try:
+        response = response.decode("utf-8")
+        print(f"DECODING: {response}")
+        response_dict = json.loads(response)
+        prompt = response_dict.get('prompt')
+        
+        #actions = [CardAction(**action) for action in actions_data] if actions_data else []
+        return prompt
+    except Exception as e:
+        traceback.print_exc()
+        return "prompt", f"error: {e}", None
+
+def encode_message(user_id, type, prompt, actions=None):
     #actions = [action.__dict__ for action in actions] if actions else []
     message = {
+        "user_id": user_id,
         "type": type,
         "prompt": prompt,
         "actions": actions
@@ -89,22 +111,35 @@ def decode_message(message):
         message = message.decode("utf-8")
         print(f"DECODING: {message}")
         message_dict = json.loads(message)
+
+        user_id = message_dict.get('user_id')
         type = message_dict.get('type')
         prompt = message_dict.get('prompt')
         actions = message_dict.get('actions')
         #actions = [CardAction(**action) for action in actions_data] if actions_data else []
-        return type, prompt, actions
+        return user_id, type, prompt, actions
     except Exception as e:
         traceback.print_exc()
         return "prompt", f"error: {e}", None
     
 
-def generate_response(text):
+def generate_whatif_response(text):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""given this information, write 2 short paragraph predicting what will happen next, one if everything went well and another if everything went wrong: {text}"""
     print(f"Function Name: generate_response | Text: {text}")
     return chat([HumanMessage(content=query)]).content
 
+def generate_plan_response(text):
+    chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+    query = f"""given this information, what would you recommend: {text}"""
+    print(f"Function Name: generate_response | Text: {text}")
+    return chat([HumanMessage(content=query)]).content
+
+def generate_response(text):
+    chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+    query = f"""given this information, should I create a task, add to my calander, respond with an email or ignore: {text}"""
+    print(f"Function Name: generate_response | Text: {text}")
+    return chat([HumanMessage(content=query)]).content
 
 nltk.download("punkt")
 

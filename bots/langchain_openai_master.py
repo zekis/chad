@@ -4,7 +4,7 @@ from datetime import datetime
 from dotenv import find_dotenv, load_dotenv
 from tempfile import TemporaryDirectory
 import time 
-import pika
+
 import faiss
 from sys import exit
 import asyncio
@@ -35,7 +35,9 @@ from bots.langchain_peformance import ReviewerBot
 from bots.loaders.todo import scheduler_check_tasks
 from bots.loaders.outlook import scheduler_check_emails
 from bots.loaders.git import git_review
-from bots.utils import encode_message, decode_message
+from common.rabbit_comms import publish, publish_action, consume
+
+#from bots.utils import encode_message, decode_message, encode_response, decode_response
 from botbuilder.schema import (
     ActionTypes,
     CardImage,
@@ -78,7 +80,7 @@ def get_input():
     while True:
         msg = consume()
         if msg:
-            question = msg.decode("utf-8")
+            question = msg
             break
         if time.time() > timeout:
             question = "I dont know"
@@ -100,7 +102,7 @@ def get_plan_input(question):
     while True:
         msg = consume()
         if msg:
-            question = msg.decode("utf-8")
+            question = msg
             if question.lower() == "continue":
                 return plan
             if question.lower() == "pass":
@@ -130,7 +132,7 @@ def model_response():
         msg = consume()
         
         if msg:
-            question = msg.decode("utf-8")
+            question = msg
             #print(question)
             if question == 'memory':
                 response = f"Memory: {len(memory.buffer)}\n{memory.buffer}"
@@ -170,34 +172,6 @@ def model_response():
         publish( f"An exception occurred: {e}")
         
 
-def publish(message):
-    message = encode_message('prompt', message)
-    notify_channel = connection.channel()
-    notify_channel.basic_publish(exchange='',
-                      routing_key='notify',
-                      body=message)
-    print(message)
-    notify_channel.close()
-
-def publish_action(message, button1, button2):
-    actions = [CardAction(
-        type=ActionTypes.im_back,
-        title=button1,
-        value=button1,
-    ),
-    CardAction(
-        type=ActionTypes.im_back,
-        title=button2,
-        value=button2,
-    )]
-    actions = [action.__dict__ for action in actions] if actions else []
-    message = encode_message('action', message, actions)
-    notify_channel = connection.channel()
-    notify_channel.basic_publish(exchange='',
-                      routing_key='notify',
-                      body=message)
-    print(message)
-    notify_channel.close()
 
 def process_task_schedule():
     task = scheduler_check_tasks(config.Todo_BotsTaskFolder)
@@ -219,17 +193,7 @@ def process_task_schedule():
 
 def process_email_schedule():
     scheduler_check_emails()
-    # if not email:
-    #     print("No emails")
-    # else:
-    #     publish("Looks like I have recieved an email.")
-    #     publish(email)
-    #     current_date_time = datetime.now() 
-    #     try:
-    #         prompt = f'''Given the following email, Suggest actions or a reply that could be used to respond to the email below:
-    #         {email}'''
-    #         plan = get_plan_input(prompt)
-    #         if plan != "stop":
+                
                 
     #             message_channel.basic_publish(exchange='',routing_key='message',body=plan)
     #         else:
@@ -242,20 +206,21 @@ def process_email_schedule():
     #     # task.body = task.body + "\n" + response
     #     # task.mark_completed()
     #     # task.save()
-
-def consume():
-    message_channel = connection.channel()
-    message_channel.queue_declare(queue='message')
-    method, properties, body = message_channel.basic_get(queue='message', auto_ack=True)
-    message_channel.close()
     
-    return body
+    #             message_channel.basic_publish(exchange='',routing_key='message',body=plan)
+    #         else:
+    #             publish("Ok, let me know if I can be of assistance.")
+    #     #     response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
+    #     except Exception as e:
+    #         publish( f"An exception occurred: {e}")
+    #     # #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
+    #     # print(f"process schedule: {response}")
+    #     # task.body = task.body + "\n" + response
+    #     # task.mark_completed()
+    #     # task.save()
 
-# def consume_schedule():
-#     method, properties, body = schedule_channel.basic_get(queue='schedule', auto_ack=True)
-#     if body:
-#         print(f"schedule: {body}")
-#     return body
+
+    
 
 def chad_zero_shot_prompt(llm, tools, memory):
    
@@ -334,16 +299,16 @@ def load_chads_tools(llm) -> list():
 load_dotenv(find_dotenv())
 
 #message queue
-connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-#channel = connection.channel()
+# connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+# #channel = connection.channel()
 
-message_channel = connection.channel()
-notify_channel = connection.channel()
-schedule_channel = connection.channel()
+# message_channel = connection.channel()
+# notify_channel = connection.channel()
+# schedule_channel = connection.channel()
 
-message_channel.queue_declare(queue='message')
-notify_channel.queue_declare(queue='notify')
-schedule_channel.queue_declare(queue='schedule')
+# message_channel.queue_declare(queue='message')
+# notify_channel.queue_declare(queue='notify')
+# schedule_channel.queue_declare(queue='schedule')
 
 # Define your embedding model
 
@@ -358,7 +323,7 @@ reviewerBot = ReviewerBot()
 # embedding_size = 1536
 # index = faiss.IndexFlatL2(embedding_size)
 # vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
-handler = RabbitHandler(notify_channel)
+handler = RabbitHandler()
 tools = load_chads_tools(llm)
 chat_history = MessagesPlaceholder(variable_name="chat_history")
 memory = ConversationBufferWindowMemory(memory_key="chat_history",k=2)

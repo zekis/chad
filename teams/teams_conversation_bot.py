@@ -9,10 +9,12 @@ import random
 import requests
 import subprocess
 import config
+import pickle
+
 from teams.elevenlabs import speech
-from teams.card_factories import create_media_card
+from common.card_factories import create_media_card
 from typing import List
-from botbuilder.core import ActivityHandler, CardFactory, TurnContext, MessageFactory, ShowTypingMiddleware
+from botbuilder.core import ActivityHandler, CardFactory, TurnContext, MessageFactory, ShowTypingMiddleware, ConversationState, UserState
 from botbuilder.core.teams import TeamsActivityHandler, TeamsInfo
 from botbuilder.schema import Mention, ConversationParameters, Activity, ActivityTypes
 from botbuilder.schema.teams import TeamInfo, TeamsChannelAccount
@@ -20,7 +22,8 @@ from botbuilder.schema.teams import TeamInfo, TeamsChannelAccount
 #from bots.model_openai import model_response
 from botbuilder.core import BotFrameworkAdapter
 import pika
-from bots.utils import encode_message, decode_message
+#from bots.utils import encode_message, decode_message, encode_response, decode_response
+from common.rabbit_comms import publish, publish_action, consume, send_to_bot, receive_from_bot
 
 from typing import Dict
 
@@ -36,7 +39,7 @@ from botbuilder.schema import (
     InvokeResponse
 )
 
-from teams.task_module_response_factory import TaskModuleResponseFactory
+from teams.data_models import TaskModuleResponseFactory, ConversationData, UserProfile
 
 from botbuilder.schema.teams import (
     TaskModuleContinueResponse,
@@ -81,115 +84,84 @@ class TeamsConversationBot(TeamsActivityHandler):
     
     load_dotenv(find_dotenv())
     # We'll make a temporary directory to avoid clutter
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    message_channel = connection.channel()
-    notify_channel = connection.channel()
-    schedule_channel = connection.channel()
+    # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    # message_channel = connection.channel()
+    # notify_channel = connection.channel()
+    # schedule_channel = connection.channel()
 
-    message_channel.queue_declare(queue='message')
-    notify_channel.queue_declare(queue='notify')
-    schedule_channel.queue_declare(queue='schedule')
+    # message_channel.queue_declare(queue='message')
+    # notify_channel.queue_declare(queue='notify')
+    # schedule_channel.queue_declare(queue='schedule')
 
     process = None
     #ADAPTER = BotFrameworkAdapter
 
-    def __init__(self, app_id: str, app_password: str, conversation_references: Dict[str, ConversationReference]):
+    def __init__(self, app_id: str, app_password: str, conversation_state: ConversationState, user_state: UserState, conversation_references: Dict[str, ConversationReference]):
         self.conversation_references = conversation_references
+        # Load conversation references if file exists
+        self.filename = "conversation_references.pkl"
+        if os.path.exists(self.filename):
+            with open(self.filename, "rb") as file:
+                self.conversation_references = pickle.load(file)
+
+        #this bot id and password matches the azure id configuration.
         self._app_id = app_id
         self._app_password = app_password
         #self.ADAPTER = ADAPTER
         self.__base_url = config.BASE_URL
 
-    #async def on_teams_task_module_fetch(self, turn_context: TurnContext, task_module_request: TaskModuleRequest) -> TaskModuleResponse:
+        if conversation_state is None:
+            raise TypeError(
+                "[StateManagementBot]: Missing parameter. conversation_state is required but None was given"
+            )
+        if user_state is None:
+            raise TypeError(
+                "[StateManagementBot]: Missing parameter. user_state is required but None was given"
+            )
 
-        # card_task_fetch_value = task_module_request.data.get("create_tts", None)
-        # print(card_task_fetch_value)
+        self.conversation_state = conversation_state
+        self.user_state = user_state
 
-        # url = config.BASE_URL + "/tts.html"
+        self.conversation_data_accessor = self.conversation_state.create_property("ConversationData")
+        self.user_profile_accessor = self.user_state.create_property("UserProfile")
 
-        # card = HeroCard(
-        #     text="This is a task module card",
-        #     buttons=[
-        #             CardAction(
-        #                 type=ActionTypes.open_url,
-        #                 title="Go to URL",
-        #                 value=url,
-        #             )
-        #         ],
-        #     )
 
-        # task_info = TaskModuleTaskInfo(
-        #     title="Task",
-        #     card=Attachment(content_type='application/vnd.microsoft.card.hero', content=card)
-        # )
+   
+    async def on_turn(self, turn_context: TurnContext):
+        await super().on_turn(turn_context)
 
-        # continue_response = TaskModuleContinueResponse(value=task_info)
-        # return TaskModuleResponse(task=continue_response)
-        # if card_task_fetch_value:
-        #     print(card_task_fetch_value)
-        #     """Create some audio using ElevenLabs"""
-        #     #speech("media.mpeg", card_task_fetch_value)            
-        #     task_info.url = task_info.fallback_url = url
-        #     task_info.height = 1000
-        #     task_info.width = 700
-        #     task_info.title = "TTS"
+        await self.conversation_state.save_changes(turn_context)
+        await self.user_state.save_changes(turn_context)
 
-        #     continue_response = TaskModuleContinueResponse(value=task_info)
-
-            
+    async def on_members_added_activity(
+        self, members_added: [ChannelAccount], turn_context: TurnContext
+    ):
+        #When a member sends activity, if they are not recipient, send welcome
+        for member in members_added:
+            if member.id != turn_context.activity.recipient.id:
+                await turn_context.send_activity(
+                    "Welcome. Type anything to get started."
+                )
+    async def _show_members(
+        self, turn_context: TurnContext
+    ):
+        # Get a conversationMember from a team.
+        members = await TeamsInfo.get_team_members(turn_context)
         
-
-
-
-    # async def on_turn(self, turn_context: TurnContext):
-    #     print("sHELLO")
-    #     if turn_context.activity.value:
-    #         print(f"Got Activity: {turn_context.activity}")
-    #         # Get the input value. This will be in turn_context.activity.value['acDecision'].
-    #         selected_value = turn_context.activity.value.get('acDecision', None)
-    #         suggestions_value = turn_context.activity.value.get('suggestions', None)
-            
-    #         # You can then use the selected value to trigger the imBack event.
-    #         if selected_value:
-                
-    #             if suggestions_value:
-    #                 print(selected_value)
-    #                 print(suggestions_value)
-    #                 feedback = f"user_improvements: {suggestions_value}, {selected_value}"
-    #                 self.send(feedback)
-    #             else:
-    #                 print(selected_value)
-    #                 feedback = f"{selected_value}"
-    #                 self.send(feedback)
-
-    #         data = turn_context.activity.value.get('data', None)
-    #         if data:
-    #             create_tts = data.get('create_tts', None)
-    #             """Create some audio using ElevenLabs"""
-    #             #speech("media.mpeg", create_tts)
-    #             task_info = TaskModuleTaskInfo()
-    #             task_info.url = task_info.fallback_url = (config.BASE_URL + "/tts.html")
-
-    #             return TaskModuleResponse(task=TaskModuleMessageResponse(value=task_info))
-
-    #     await super().on_turn(TurnContext)
-
-    #     #     return await turn_context.send_activities([
-    #     #             Activity(
-    #     #                 type=ActivityTypes.typing
-    #     #             )])
-    #     # else:
-    #     #     print(f"No Activity: {turn_context.activity}")
-    #     #     return await self.on_message_activity(turn_context)
-
     async def on_message_activity(self, turn_context: TurnContext):
         global process
+        # Get the state properties from the turn context.
+        user_profile = await self.user_profile_accessor.get(turn_context, UserProfile)
+        conversation_data = await self.conversation_data_accessor.get(turn_context, ConversationData)
         self._add_conversation_reference(turn_context.activity)
-        #TurnContext.remove_recipient_mention(turn_context.activity)
-        #print(turn_context.activity.value)
+
         value = turn_context.activity.value
         text = turn_context.activity.text
+        
+        conversation_reference = TurnContext.get_conversation_reference(turn_context.activity)
+        user_id = conversation_reference.user.id
 
+        print(f"Message - User ID: {user_id}")
         if value:
             print(f"Got Activity: {turn_context.activity}")
             # Get the input value. This will be in turn_context.activity.value['acDecision'].
@@ -203,11 +175,11 @@ class TeamsConversationBot(TeamsActivityHandler):
                     print(selected_value)
                     print(suggestions_value)
                     feedback = f"user_improvements: {suggestions_value}, {selected_value}"
-                    self.send(feedback)
+                    send_to_bot(user_id, feedback)
                 else:
                     print(selected_value)
                     feedback = f"{selected_value}"
-                    self.send(feedback)
+                    send_to_bot(user_id, feedback)
 
                 return await turn_context.send_activities([
                         Activity(
@@ -220,120 +192,136 @@ class TeamsConversationBot(TeamsActivityHandler):
                 return await turn_context.send_activity(reply)
         if text:
             if text.lower() == "ping":
-                #start the bot
-                return await turn_context.send_activities([
+                #Channel Test
+                await turn_context.send_activities([
                     Activity(
                         type=ActivityTypes.typing
                     ),
                     Activity(
                         type="delay",
                         value=3000
-                    ),
-                    Activity(
-                        type=ActivityTypes.message,
-                        text="pong"
                     )])
-                """start the bot"""
-                #self.publish(f"pong")
-                #process = subprocess.Popen(['python', 'ai.py'])
-                #return
-
+                publish(f"pong", user_id)
+                
+            
 
             elif text.lower() == "start":
                 #start the bot
                 """start the bot"""
-                self.publish(f"Starting bot...")
-                process = subprocess.Popen(['python', 'ai.py'])
+                publish(f"Starting bot...", user_id)
+                process = subprocess.Popen(['python', 'ai.py', user_id])
                 
             elif text.lower() == "stop":
                 #stop the bot
                 """stop the bot"""
-                self.publish(f"Stopping bot...")
+                publish(f"Stopping bot...", user_id)
                 process.terminate()
-                self.publish(f"Stopped")
+                publish(f"Stopped", user_id)
                 
             elif text.lower() == "restart":
                 #stop the bot
                 """stop the bot"""
-                self.publish(f"Stopping bot...")
+                publish(f"Stopping bot...", user_id)
                 process.terminate()
-                self.publish(f"Stopped")
-                self.publish(f"Starting bot...")
-                process = subprocess.Popen(['python', 'ai.py'])
+                publish(f"Stopped", user_id)
+                publish(f"Starting bot...", user_id)
+                process = subprocess.Popen(['python', 'ai.py', user_id])
                 
             else:
                 message = random.choice(thinking_messages)
-                response = self.message_channel.queue_declare('message', passive=True)
+                #response = self.message_channel.queue_declare('message', passive=True)
                 # if response.method.message_count > 0:
                 #     self.publish(f"Im already working on {response.method.message_count} messages")
                 
                 #self.notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
-                self.message_channel.basic_publish(exchange='',routing_key='message',body=text)
+                #self.message_channel.basic_publish(exchange='',routing_key='message',body=text)
+                send_to_bot(user_id, text)
                 print(text)
 
-            return await turn_context.send_activities([
-                    Activity(
-                        type=ActivityTypes.typing
-                    )])
+                return await turn_context.send_activities([
+                        Activity(
+                            type=ActivityTypes.typing
+                        )])
 
     def _add_conversation_reference(self, activity: Activity):
         conversation_reference = TurnContext.get_conversation_reference(activity)
-        self.conversation_references[
-            conversation_reference.user.id
-        ] = conversation_reference
+        self.conversation_references[conversation_reference.user.id] = conversation_reference
+        # Save conversation references to disk
+        with open(self.filename, "wb") as file:
+            pickle.dump(self.conversation_references, file)
 
-    def init_bot(self, bot_name):
+    def init_bot(self,user_id, bot_name):
         current_date_time = datetime.now().date()
-        self.publish("Hey Bro!")
-        #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"Establish a personal connection with your human by asking for their name and using it in future interactions. This will help build trust and rapport between you and your human."))
-        #self.message_channel.basic_publish(exchange='',routing_key='message',body=(f"As an AI, You are keen to learn things about me, my family, likes and dislikes, so ask a random question using the human tool and save the response to memory"))
-        
-        #self.message_channel.basic_publish(exchange='',routing_key='message',body="List the tasks in the AutoCHAD folder and use non task tools to action each one. Once complete mark the task as completed") 
-        #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the weather in ellebrook?")
-        #self.message_channel.basic_publish(exchange='',routing_key='message',body="what is the latest news for Perth WA?")
+        publish("Hey Bro!", user_id)
+        #put more init functions here like checking settings etc
 
-    def publish(self, message):
-        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-        notify_channel = connection.channel()
-        notify_channel.queue_declare(queue='notify')
-        message = encode_message("prompt", message)
-        notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+    # #Publish to the user
+    # def publish(self, user_id, prompt):
+    #     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    #     notify_channel = connection.channel()
+    #     notify_channel.queue_declare(queue='notify')
+    #     message = encode_message(user_id, "prompt", prompt)
+    #     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
-    def send(self, message):
-        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-        message_channel = connection.channel()
-        message_channel.queue_declare(queue='notify')
-        message = encode_message("prompt", message)
-        message_channel.basic_publish(exchange='',routing_key='message',body=message)
+    
 
 
     async def process_message(self, ADAPTER):
-        for conversation_reference in self.conversation_references.values():
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
-            if body:
-                #print(f"SERVER: {body}")
-                type, body, data = decode_message(body)
-                #decoded_body = body.decode("utf-8")
-                decoded_body = body
-                if type == "prompt":
-                    if body == "bot1_online":
-                        self.init_bot("AutoCHAD")
-                    else:
-                        await ADAPTER.continue_conversation(
-                            conversation_reference,
-                            lambda turn_context: turn_context.send_activity(MessageFactory.text(body)),
-                            self._app_id,
-                        )
-                        print(decoded_body)
+        #conversation_references are populated with every message recieved. It uniquly identifies the sender.
+        #for conversation_reference in self.conversation_references.values():
+        #print('Processing')
+        
+        # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        # notify_channel = connection.channel()
+        # method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
+        user_id, type, body, data = receive_from_bot()
+
+        if body:
+            
+            #user_id, type, body, data = decode_message(body)
+            print(f"SERVER: user_id: {user_id}, type: {type}, body: {body}")
+
+            conversation_reference = self.conversation_references.get(user_id, None)
+            if conversation_reference is None:
+                # Handle the case when the conversation reference is not found
+                print(f"Conversation reference not found for user ID: {user_id}")
+                return
+            #decoded_body = body.decode("utf-8")
+            decoded_body = body
+            if type == "prompt":
+                if body == "bot1_online":
+                    self.init_bot(user_id, "AutoCHAD")
+                else:
+                    await ADAPTER.continue_conversation(
+                        conversation_reference,
+                        lambda turn_context: turn_context.send_activity(MessageFactory.text(body)),
+                        self._app_id,
+                    )
+                    print(decoded_body)
+                
+            elif type == "action":
+                #actions = message_dict.get('actions')
+                actions = [CardAction(**action) for action in data] if data else []
+                message = Activity(
+                    type=ActivityTypes.message,
+                    attachments=[self.create_hero_card(body, actions)]
                     
-                elif type == "action":
-                    #actions = message_dict.get('actions')
-                    actions = [CardAction(**action) for action in data] if data else []
+                )
+                ##teams_actions = self.get_actions(body, actions)
+                #conversation_reference = TurnContext.
+                await ADAPTER.continue_conversation(
+                    conversation_reference,
+                    lambda turn_context: turn_context.send_activity(message),
+                    self._app_id,
+                )
+            elif type == "cards":
+                #actions = message_dict.get('actions')
+                if data:
+                    card_data = json.loads(data)
+                    print(f"CARD: {card_data}")
                     message = Activity(
                         type=ActivityTypes.message,
-                        attachments=[self.create_hero_card(body, actions)]
+                        attachments=[CardFactory.adaptive_card(card_data)]
                         
                     )
                     ##teams_actions = self.get_actions(body, actions)
@@ -343,23 +331,6 @@ class TeamsConversationBot(TeamsActivityHandler):
                         lambda turn_context: turn_context.send_activity(message),
                         self._app_id,
                     )
-                elif type == "cards":
-                    #actions = message_dict.get('actions')
-                    if data:
-                        card_data = json.loads(data)
-                        print(f"CARD: {card_data}")
-                        message = Activity(
-                            type=ActivityTypes.message,
-                            attachments=[CardFactory.adaptive_card(card_data)]
-                            
-                        )
-                        ##teams_actions = self.get_actions(body, actions)
-                        #conversation_reference = TurnContext.
-                        await ADAPTER.continue_conversation(
-                            conversation_reference,
-                            lambda turn_context: turn_context.send_activity(message),
-                            self._app_id,
-                        )
     
     def create_hero_card(self, prompt, actions) -> Attachment:
         card = HeroCard(

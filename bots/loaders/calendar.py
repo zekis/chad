@@ -14,9 +14,10 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
-from teams.card_factories import create_list_card, create_event_card
-from bots.utils import encode_message, decode_message, generate_response
-from bots.utils import validate_response, parse_input
+#from teams.card_factories import create_list_card, create_event_card
+from common.rabbit_comms import publish, publish_event_card, publish_list
+from common.utils import generate_response, generate_whatif_response, generate_plan_response
+from common.utils import validate_response, parse_input
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
@@ -79,36 +80,8 @@ def get_event(eventID):
     event = calendar.get_event(eventID)  # include_recurring=True will include repeated events on the result set.
     return event
 
-def publish_list(message,strings_values):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='notify')
-    
-    #convert string to dict (hopefully our AI has formatted it correctly)
-    try:
-        cards = create_list_card(message,strings_values)
-        #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
-    except Exception as e:
-        traceback.print_exc()
-        cards = None
-    
-    message = encode_message("cards", message, cards)
-    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
-def publish_card(message,event):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='notify')
-    
-    #convert string to dict (hopefully our AI has formatted it correctly)
-    try:
-        cards = create_event_card(message,event)
-    except Exception as e:
-        traceback.print_exc()
-        cards = None
-    
-    message = encode_message("cards", message, cards)
-    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
 
 class MSGetCalendarEvents(BaseTool):
     name = "GET_CALENDAR_EVENTS"
@@ -175,7 +148,7 @@ class MSGetCalendarEvent(BaseTool):
             if event:
                 ai_summary = ai_summary + " - Event: " + event.subject + ", At " + event.start.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
                 title_message = f"Event Review"
-                publish_card(title_message, event)
+                publish_event_card(title_message, event)
                 #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
                 return generate_response(ai_summary)
             

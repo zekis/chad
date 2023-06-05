@@ -11,14 +11,18 @@ from typing import Dict
 from aiohttp import web
 from aiohttp.web import Request, Response, json_response
 from botbuilder.core import (
-    BotFrameworkAdapterSettings,
-    TurnContext,
     BotFrameworkAdapter,
+    BotFrameworkAdapterSettings,
+    ConversationState,
+    MemoryStorage,
+    TurnContext,
+    UserState,
     ShowTypingMiddleware,
 )
 from botbuilder.core.integration import aiohttp_error_middleware
 from botbuilder.schema import Activity, ActivityTypes, ConversationReference
 
+from teams.data_models import TaskModuleResponseFactory, ConversationData, UserProfile
 from teams.teams_conversation_bot import TeamsConversationBot
 import config
 
@@ -57,16 +61,21 @@ async def on_error(context: TurnContext, error: Exception):
         # Send a trace activity, which will be displayed in Bot Framework Emulator
         await context.send_activity(trace_activity)
 
+    # Clear out state
+    await CONVERSATION_STATE.delete(context)
 
 ADAPTER.on_turn_error = on_error
 ADAPTER.use(ShowTypingMiddleware(delay=0.01, period=6.0))
-# If the channel is the Emulator, and authentication is not in use, the AppId will be null.
-# We generate a random AppId for this case only. This is not required for production, since
-# the AppId will have a value.
-APP_ID = SETTINGS.app_id if SETTINGS.app_id else uuid.uuid4()
+
+APP_ID = SETTINGS.app_id
+
+# Create MemoryStorage and state
+MEMORY = MemoryStorage()
+USER_STATE = UserState(MEMORY)
+CONVERSATION_STATE = ConversationState(MEMORY)
 CONVERSATION_REFERENCES: Dict[str, ConversationReference] = dict()
 # Create the Bot
-BOT = TeamsConversationBot(config.APP_ID, config.APP_PASSWORD, CONVERSATION_REFERENCES)
+BOT = TeamsConversationBot(config.APP_ID, config.APP_PASSWORD, CONVERSATION_STATE, USER_STATE, CONVERSATION_REFERENCES)
 
 
 # Listen for incoming requests on /api/messages.

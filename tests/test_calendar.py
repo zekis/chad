@@ -1,7 +1,7 @@
 import json
 from datetime import date, timedelta
 from bots.loaders.calendar import MSGetCalendarEvents, MSGetCalendarEvent
-from bots.utils import create_email
+from common.utils import create_email
 #from bots.loaders.outlook import get_email_summary
 
 

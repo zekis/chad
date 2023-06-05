@@ -12,8 +12,10 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
-from bots.utils import encode_message, decode_message
-from bots.utils import validate_response, parse_input, sanitize_subject
+#from common.rabbit_comms import publish, publish_card, publish_list
+from common.utils import encode_message, decode_message
+from common.utils import validate_response, parse_input, sanitize_subject
+from common.utils import generate_response, generate_whatif_response, generate_plan_response
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun

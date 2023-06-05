@@ -14,6 +14,8 @@ from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
 from bots.rabbit_handler import RabbitHandler
+from common.rabbit_comms import publish, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card
+
 from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
 from bots.langchain_search import SearchBot
 
@@ -65,11 +67,11 @@ class EmailBot(BaseTool):
     def model_response(self, text):
         try:
             #config
-            load_dotenv(find_dotenv())
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
-            handler = RabbitHandler(notify_channel)
+            # load_dotenv(find_dotenv())
+            # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            # notify_channel = connection.channel()
+            # notify_channel.queue_declare(queue='notify')
+            handler = RabbitHandler()
             
             # Define embedding model
             llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")

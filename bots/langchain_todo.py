@@ -54,11 +54,11 @@ class TaskBot(BaseTool):
     def model_response(self, text):
         try:
             #config
-            load_dotenv(find_dotenv())
-            connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            notify_channel = connection.channel()
-            notify_channel.queue_declare(queue='notify')
-            handler = RabbitHandler(notify_channel)
+            # load_dotenv(find_dotenv())
+            # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            # notify_channel = connection.channel()
+            # notify_channel.queue_declare(queue='notify')
+            # handler = RabbitHandler(notify_channel)
 
             # Define embedding model
             llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")

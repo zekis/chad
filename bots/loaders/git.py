@@ -11,8 +11,10 @@ import uuid
 import subprocess
 from typing import Optional
 
-from teams.card_factories import create_list_card, create_event_card
-from bots.utils import encode_message, clean_and_tokenize, format_documents, format_user_question
+#from common.card_factories import create_list_card, create_event_card
+from common.utils import encode_message, clean_and_tokenize, format_documents, format_user_question
+from common.utils import generate_response, generate_whatif_response, generate_plan_response
+from common.rabbit_comms import publish
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -123,37 +125,37 @@ def consume():
 
 
 
-def publish(message):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    message = encode_message('prompt', message)
-    notify_channel = connection.channel()
-    notify_channel.basic_publish(exchange='',
-                      routing_key='notify',
-                      body=message)
-    print(message)
-    notify_channel.close()
+# def publish(message):
+#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+#     message = encode_message('prompt', message)
+#     notify_channel = connection.channel()
+#     notify_channel.basic_publish(exchange='',
+#                       routing_key='notify',
+#                       body=message)
+#     print(message)
+#     notify_channel.close()
 
-def publish_action(message, button1, button2):
-    actions = [CardAction(
-        type=ActionTypes.im_back,
-        title=button1,
-        value=button1,
-    ),
-    CardAction(
-        type=ActionTypes.im_back,
-        title=button2,
-        value=button2,
-    )]
-    actions = [action.__dict__ for action in actions] if actions else []
-    message = encode_message('action', message, actions)
+# def publish_action(message, button1, button2):
+#     actions = [CardAction(
+#         type=ActionTypes.im_back,
+#         title=button1,
+#         value=button1,
+#     ),
+#     CardAction(
+#         type=ActionTypes.im_back,
+#         title=button2,
+#         value=button2,
+#     )]
+#     actions = [action.__dict__ for action in actions] if actions else []
+#     message = encode_message('action', message, actions)
 
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.basic_publish(exchange='',
-                      routing_key='notify',
-                      body=message)
-    print(message)
-    notify_channel.close()
+#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+#     notify_channel = connection.channel()
+#     notify_channel.basic_publish(exchange='',
+#                       routing_key='notify',
+#                       body=message)
+#     print(message)
+#     notify_channel.close()
 
 
 class git_review(BaseTool):

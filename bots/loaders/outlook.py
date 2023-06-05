@@ -14,9 +14,10 @@ from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
 
-from teams.card_factories import create_list_card, create_email_card, create_draft_reply_email_card, create_draft_forward_email_card, create_draft_email_card
-from bots.utils import encode_message, decode_message, generate_response
-from bots.utils import validate_response, parse_input, sanitize_string
+#from teams.card_factories import create_list_card, create_email_card, create_draft_reply_email_card, create_draft_forward_email_card, create_draft_email_card
+from common.rabbit_comms import publish, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card
+from common.utils import generate_response, generate_whatif_response, generate_plan_response
+from common.utils import validate_response, parse_input, sanitize_string
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
@@ -334,82 +335,51 @@ def scheduler_check_emails():
     if emails:
         for email in emails:
             summary = get_email_summary(clean_html(email.body))
-            publish_card("Email", email, summary)
+            publish_email_card("Email", email, summary)
             #ai_summary = format_email_summary_only(email, summary)
             email.mark_as_read()
             #return ai_summary
     return None
 
-def publish(message):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='notify')
-    message = encode_message("prompt", message)
-    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+# def publish(message):
+#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+#     notify_channel = connection.channel()
+#     notify_channel.queue_declare(queue='notify')
+#     message = encode_message("prompt", message)
+#     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
-def publish_list(message,strings_values):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='notify')
+# def publish_list(message,strings_values):
+#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+#     notify_channel = connection.channel()
+#     notify_channel.queue_declare(queue='notify')
     
-    #convert string to dict (hopefully our AI has formatted it correctly)
-    try:
-        cards = create_list_card(message,strings_values)
-        #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
-    except Exception as e:
-        traceback.print_exc()
-        cards = None
+#     #convert string to dict (hopefully our AI has formatted it correctly)
+#     try:
+#         cards = create_list_card(message,strings_values)
+#         #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
+#     except Exception as e:
+#         traceback.print_exc()
+#         cards = None
     
-    message = encode_message("cards", message, cards)
-    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+#     message = encode_message("cards", message, cards)
+#     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
-def publish_card(message,email,summary):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='notify')
+# def publish_card(message,email,summary):
+#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+#     notify_channel = connection.channel()
+#     notify_channel.queue_declare(queue='notify')
     
-    #convert string to dict (hopefully our AI has formatted it correctly)
-    try:
-        cards = create_email_card(message,email,summary)
-    except Exception as e:
-        traceback.print_exc()
-        cards = None
+#     #convert string to dict (hopefully our AI has formatted it correctly)
+#     try:
+#         cards = create_email_card(message,email,summary)
+#     except Exception as e:
+#         traceback.print_exc()
+#         cards = None
     
-    message = encode_message("cards", message, cards)
-    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+#     message = encode_message("cards", message, cards)
+#     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
-def publish_draft_card(message,email,response, reply=False):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='notify')
-    
-    #convert string to dict (hopefully our AI has formatted it correctly)
-    try:
-        if reply:
-            cards = create_draft_reply_email_card(message,email,response)
-        else:
-            cards = create_draft_email_card(message,email,response)
-    except Exception as e:
-        traceback.print_exc()
-        cards = None
-    
-    message = encode_message("cards", message, cards)
-    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
-def publish_draft_forward_card(message,email,response):
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    notify_channel = connection.channel()
-    notify_channel.queue_declare(queue='notify')
-    
-    #convert string to dict (hopefully our AI has formatted it correctly)
-    try:
-        cards = create_draft_forward_email_card(message,email,response)
-    except Exception as e:
-        traceback.print_exc()
-        cards = None
-    
-    message = encode_message("cards", message, cards)
-    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
 class MSSearchEmailsId(BaseTool):
     name = "SEARCH_EMAILS_RETURN_IDS"
@@ -477,7 +447,7 @@ class MSGetEmailDetail(BaseTool):
 
             if email:
                 summary = get_email_summary(clean_html(email.body))
-                publish_card("Email Review", email, summary)
+                publish_email_card("Email Review", email, summary)
                 ai_summary = format_email_summary_only(email, summary)
                 return generate_response(ai_summary)
             

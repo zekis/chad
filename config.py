@@ -19,3 +19,6 @@ EMAIL_CACHE_FILE_NAME = os.getenv("EMAIL_CACHE_FILE_NAME")
 EMAIL_SIGNATURE_HTML = os.getenv("EMAIL_SIGNATURE_HTML")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 BASE_URL = os.getenv("BASE_URL")
+
+#unique to this bot session, set from command line
+USER_ID = ""
