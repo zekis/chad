@@ -132,6 +132,14 @@ def create_email_card(message,email, summary):
             },
             {
                 "type": "Action.Submit",
+                "title": "Create Task",
+                "data": {
+                    "acDecision": f"Please use the TASK_MANAGER tool to create an action for me to do based on the email following summary: {summary}"
+                }
+                
+            },
+            {
+                "type": "Action.Submit",
                 "title": "Read Aloud",
                 "id": "btnReadAloud",
                 "data": {
@@ -494,3 +502,64 @@ def create_media_card(message, url):
         ]
     }
     return cards
+
+
+        #     created = {task.created}
+    #     modified = {task.modified}
+    #     importance = {task.importance}
+    #     is_starred = {task.is_starred}
+    #     due = {task.due}
+    #     completed = {task.completed}
+    #     description = {task.body}
+    # """
+
+def create_todo_card(message,event):
+    cards = {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+            {
+                "type": "Container",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "size": "medium",
+                        "weight": "Bolder",
+                        "horizontalAlignment": "Left",
+                        "text": message
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": event.subject,
+                        "weight": "bolder",
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "spacing": "none",
+                        "text": f"Due {event.due.strftime('%Y-%m-%d %H:%M')}",
+                        "isSubtle": True,
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "spacing": "none",
+                        "text": f"Importance: {event.importance}",
+                        "isSubtle": True,
+                        "wrap": True
+                    }
+                    ,
+                    {
+                        "type": "TextBlock",
+                        "spacing": "none",
+                        "text": f"Completed {event.importance}",
+                        "isSubtle": True,
+                        "wrap": True
+                    }
+                ]
+            }
+            
+        ]
+    }
+
+    return json.dumps(cards)

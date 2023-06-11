@@ -59,7 +59,7 @@ class RabbitFeedbackHandler(BaseCallbackHandler):
         if message:
             #message = encode_message(config.USER_ID,'on_agent_finish', message)
             #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            publish(message)
+            print(message)
 
     def on_chain_end(
         self,

@@ -1,6 +1,7 @@
 import traceback
 import config
 import pika
+import json
 
 from common.card_factories import (
     create_draft_email_card, 
@@ -9,16 +10,66 @@ from common.card_factories import (
     create_email_card, 
     create_event_card, 
     create_list_card, 
-    create_media_card
+    create_media_card,
+    create_todo_card
 )
 
-from common.utils import encode_message, decode_message, encode_response, decode_response
+#from common.utils import encode_message, decode_message, encode_response, decode_response
 
 from botbuilder.schema import (
     ActionTypes,
     CardImage,
     CardAction
 )
+
+def encode_response(prompt):
+    #actions = [action.__dict__ for action in actions] if actions else []
+    response = {
+        "prompt": prompt
+    }
+    print(f"ENCODING: {response}")
+    return json.dumps(response)
+
+def decode_response(response):
+    try:
+        response = response.decode("utf-8")
+        print(f"DECODING: {response}")
+        response_dict = json.loads(response)
+        prompt = response_dict.get('prompt')
+        
+        #actions = [CardAction(**action) for action in actions_data] if actions_data else []
+        return prompt
+    except Exception as e:
+        traceback.print_exc()
+        return "prompt", f"error: {e}", None
+
+def encode_message(user_id, type, prompt, actions=None):
+    #actions = [action.__dict__ for action in actions] if actions else []
+    message = {
+        "user_id": user_id,
+        "type": type,
+        "prompt": prompt,
+        "actions": actions
+    }
+    print(f"ENCODING: {message}")
+    return json.dumps(message)
+
+def decode_message(message):
+    try:
+        message = message.decode("utf-8")
+        print(f"DECODING: {message}")
+        message_dict = json.loads(message)
+
+        user_id = message_dict.get('user_id')
+        type = message_dict.get('type')
+        prompt = message_dict.get('prompt')
+        actions = message_dict.get('actions')
+        #actions = [CardAction(**action) for action in actions_data] if actions_data else []
+        return user_id, type, prompt, actions
+    except Exception as e:
+        traceback.print_exc()
+        return "prompt", f"error: {e}", None
+    
 
 def publish(message, override_id=None):
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
@@ -82,6 +133,21 @@ def publish_event_card(message,event):
     #convert string to dict (hopefully our AI has formatted it correctly)
     try:
         cards = create_event_card(message,event)
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message(config.USER_ID, "cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
+def publish_todo_card(message,task):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        cards = create_todo_card(message,task)
     except Exception as e:
         traceback.print_exc()
         cards = None

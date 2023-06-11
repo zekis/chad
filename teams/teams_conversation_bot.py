@@ -87,14 +87,14 @@ class TeamsConversationBot(TeamsActivityHandler):
     
     load_dotenv(find_dotenv())
     # We'll make a temporary directory to avoid clutter
-    # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    # message_channel = connection.channel()
-    # notify_channel = connection.channel()
-    # schedule_channel = connection.channel()
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    message_channel = connection.channel()
+    notify_channel = connection.channel()
+    schedule_channel = connection.channel()
 
-    # message_channel.queue_declare(queue='message')
-    # notify_channel.queue_declare(queue='notify')
-    # schedule_channel.queue_declare(queue='schedule')
+    message_channel.queue_declare(queue='message')
+    notify_channel.queue_declare(queue='notify')
+    schedule_channel.queue_declare(queue='schedule')
 
     #user_processes = {}
 
@@ -107,6 +107,10 @@ class TeamsConversationBot(TeamsActivityHandler):
         if os.path.exists(self.filename):
             with open(self.filename, "rb") as file:
                 self.conversation_references = pickle.load(file)
+
+        #message_channel.queue_declare(queue='message')
+        #notify_channel.queue_declare(queue='notify')
+        
 
         #this bot id and password matches the azure id configuration.
         self._app_id = app_id
@@ -147,13 +151,13 @@ class TeamsConversationBot(TeamsActivityHandler):
                 await turn_context.send_activity(
                     "Welcome. Type anything to get started."
                 )
-    async def _show_members(
+    
+    async def get_member(
         self, turn_context: TurnContext
     ):
-        # Get a conversationMember from a team.
-        members = await TeamsInfo.get_team_members(turn_context)
-    
-    
+        # TeamsInfo.get_member: Gets the member of a team scoped conversation.
+        member = await TeamsInfo.get_member(turn_context, turn_context.activity.from_property.id)
+        return member
 
         
     async def on_message_activity(self, turn_context: TurnContext):
@@ -168,8 +172,18 @@ class TeamsConversationBot(TeamsActivityHandler):
         
         conversation_reference = TurnContext.get_conversation_reference(turn_context.activity)
         user_id = conversation_reference.user.id
+        member = await self.get_member(turn_context)
+        print(f"member: {member.email}")
+        # print(f"conversation_reference: {conversation_reference}")
+        # print(f"conversation_reference.bot: {conversation_reference.bot}")
+        # print(f"conversation_reference.conversation: {conversation_reference.conversation}")
+        # print(f"conversation_reference.user: {conversation_reference.user}")
+        user_name = conversation_reference.user.name
+        tenant_id = conversation_reference.conversation.tenant_id
+        email_address = member.email
 
-        print(f"Message - User ID: {user_id}")
+        print(f"Message - User ID: {user_id}, TenantID: {tenant_id}")
+        
         if value:
             print(f"Got Activity: {turn_context.activity}")
             # Get the input value. This will be in turn_context.activity.value['acDecision'].
@@ -212,22 +226,23 @@ class TeamsConversationBot(TeamsActivityHandler):
                 publish(f"pong", user_id)
 
             elif text.lower() == "bot_start":
-                self.bot_manager.handle_command("start", user_id)
+                self.bot_manager.handle_command("start", user_id, tenant_id, user_name, email_address)
                 
             elif text.lower() == "bot_stop":
                 self.bot_manager.handle_command("stop", user_id)
                 
             elif text.lower() == "bot_restart":
-                self.bot_manager.handle_command("restart", user_id)
+                self.bot_manager.handle_command("restart", user_id, tenant_id, user_name, email_address)
 
             elif text.lower() == "list_bots":
                 self.bot_manager.handle_command("list_bots", user_id)
-                
+
             elif text.lower() == "stop_bots":
                 self.bot_manager.handle_command("stop_bots", user_id)
                 
             else:
                 message = random.choice(thinking_messages)
+                publish(message, user_id)
                 #response = self.message_channel.queue_declare('message', passive=True)
                 # if response.method.message_count > 0:
                 #     self.publish(f"Im already working on {response.method.message_count} messages")
@@ -253,26 +268,9 @@ class TeamsConversationBot(TeamsActivityHandler):
         current_date_time = datetime.now().date()
         publish("Hey Bro!", user_id)
         #put more init functions here like checking settings etc
-
-    # #Publish to the user
-    # def publish(self, user_id, prompt):
-    #     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    #     notify_channel = connection.channel()
-    #     notify_channel.queue_declare(queue='notify')
-    #     message = encode_message(user_id, "prompt", prompt)
-    #     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
-
-    
-
+        
 
     async def process_message(self, ADAPTER):
-        #conversation_references are populated with every message recieved. It uniquly identifies the sender.
-        #for conversation_reference in self.conversation_references.values():
-        #print('Processing')
-        
-        # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-        # notify_channel = connection.channel()
-        # method, properties, body = self.notify_channel.basic_get(queue='notify',auto_ack=True)
         user_id, type, body, data = receive_from_bot()
 
         if body:
@@ -338,11 +336,6 @@ class TeamsConversationBot(TeamsActivityHandler):
             buttons=actions
         )
         return CardFactory.hero_card(card)
-                        
-
-    # def create_adaptive_card(self) -> Attachment:
-    #     return CardFactory.adaptive_card(ADAPTIVE_CARD_CONTENT)
-
 
     def _get_internet_attachment(self) -> Attachment:
         """

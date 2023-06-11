@@ -10,10 +10,10 @@ import time
 import uuid
 import subprocess
 from typing import Optional
-
+from bots.langchain_assistant import generate_response
 #from common.card_factories import create_list_card, create_event_card
-from common.utils import encode_message, clean_and_tokenize, format_documents, format_user_question
-from common.utils import generate_response, generate_whatif_response, generate_plan_response
+from common.utils import clean_and_tokenize, format_documents, format_user_question
+#from common.utils import generate_response, generate_whatif_response, generate_plan_response
 from common.rabbit_comms import publish
 
 from sklearn.feature_extraction.text import TfidfVectorizer

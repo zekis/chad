@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
-
+from bots.langchain_assistant import generate_response
 #from teams.card_factories import create_list_card, create_email_card, create_draft_reply_email_card, create_draft_forward_email_card, create_draft_email_card
 from common.rabbit_comms import publish, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card
-from common.utils import generate_response, generate_whatif_response, generate_plan_response
+#from common.utils import generate_response, generate_whatif_response, generate_plan_response
 from common.utils import validate_response, parse_input, sanitize_string
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
@@ -52,7 +52,7 @@ embeddings = OpenAIEmbeddings()
 ### With your own identity (auth_flow_type=='credentials') ####
 def authenticate():
     credentials = (config.APP_ID, config.APP_PASSWORD)
-    account = Account(credentials,auth_flow_type='credentials',tenant_id=config.tenant_id, main_resource=config.OFFICE_USER)
+    account = Account(credentials,auth_flow_type='credentials',tenant_id=config.TENANT_ID, main_resource=config.OFFICE_USER)
     account.authenticate()
     return account
 
@@ -68,7 +68,7 @@ def get_email_summary(email):
 def reply_to_email_summary(summary, comments=None, previous_draft=None):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this email summary: {summary}, please create a reasonable email response from the perspective of {config.OFFICE_USER}.
-    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start but dont add a signature.
+    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and add a signature for {config.FRIENDLY_NAME}
     """
     if comments:
         query += f"Consider the following comments: {comments}"
@@ -82,7 +82,7 @@ def reply_to_email_summary(summary, comments=None, previous_draft=None):
 def forward_email_summary(summary, comments=None, previous_draft=None):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this email summary: {summary}, please create a reasonable email from the perspective of {config.OFFICE_USER}.
-    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start but dont add a signature.
+    Response is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and add a signature for {config.FRIENDLY_NAME}
     """
     if comments:
         query += f"Consider the following comments: {comments}"
@@ -96,7 +96,7 @@ def forward_email_summary(summary, comments=None, previous_draft=None):
 def modify_draft(body, comments, previous_draft=None):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
     query = f"""Given this request: {body}, please create a reasonable email from the perspective of {config.OFFICE_USER}
-    Email is to be HTML formatted and must include an informal 'To' salutation and opening line at the start but dont add a signature.
+    Email is to be HTML formatted and must include an informal 'To' salutation and opening line at the start and add a signature for {config.FRIENDLY_NAME}
     """
     if comments:
         query += f"Consider the following comments: {comments}"
@@ -195,7 +195,7 @@ def create_email_reply(ConversationID, body, save=False):
     reply_msg.body = body
 
     if save:
-        reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
+        #reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
         reply_msg.save_draft()
 
     return reply_msg
@@ -220,7 +220,7 @@ def create_email_forward(ConversationID, recipient, body, save=False):
     reply_msg.body = body
     
     if save:
-        reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
+        #reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
         reply_msg.save_draft()
 
     return reply_msg
@@ -257,7 +257,7 @@ def draft_email(recipient, subject, body, user_improvements=None, previous_draft
         message.body = body
 
         if save:
-            message.body += get_signature(config.EMAIL_SIGNATURE_HTML)
+            #message.body += get_signature(config.EMAIL_SIGNATURE_HTML)
             message.save_draft()
         
         return message
@@ -340,45 +340,6 @@ def scheduler_check_emails():
             email.mark_as_read()
             #return ai_summary
     return None
-
-# def publish(message):
-#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-#     notify_channel = connection.channel()
-#     notify_channel.queue_declare(queue='notify')
-#     message = encode_message("prompt", message)
-#     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
-
-# def publish_list(message,strings_values):
-#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-#     notify_channel = connection.channel()
-#     notify_channel.queue_declare(queue='notify')
-    
-#     #convert string to dict (hopefully our AI has formatted it correctly)
-#     try:
-#         cards = create_list_card(message,strings_values)
-#         #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
-#     except Exception as e:
-#         traceback.print_exc()
-#         cards = None
-    
-#     message = encode_message("cards", message, cards)
-#     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
-
-# def publish_card(message,email,summary):
-#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-#     notify_channel = connection.channel()
-#     notify_channel.queue_declare(queue='notify')
-    
-#     #convert string to dict (hopefully our AI has formatted it correctly)
-#     try:
-#         cards = create_email_card(message,email,summary)
-#     except Exception as e:
-#         traceback.print_exc()
-#         cards = None
-    
-#     message = encode_message("cards", message, cards)
-#     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
-
 
 
 class MSSearchEmailsId(BaseTool):

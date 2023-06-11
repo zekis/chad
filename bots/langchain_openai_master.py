@@ -4,6 +4,7 @@ from datetime import datetime
 from dotenv import find_dotenv, load_dotenv
 from tempfile import TemporaryDirectory
 import time 
+import json
 
 import faiss
 from sys import exit
@@ -35,6 +36,7 @@ from bots.langchain_peformance import ReviewerBot
 from bots.loaders.todo import scheduler_check_tasks
 from bots.loaders.outlook import scheduler_check_emails
 from bots.loaders.git import git_review
+from bots.langchain_toolman import ToolManGetTools, ToolManNewTool, ToolManStartTool, ToolManEditTool, ToolManTestTool, ToolManRemoveTool
 from common.rabbit_comms import publish, publish_action, consume
 
 #from bots.utils import encode_message, decode_message, encode_response, decode_response
@@ -127,6 +129,7 @@ def send_prompt(query):
 def model_response():
     planner = False
     reviewer = False
+    
     try:
         #history.predict(input=msg)
         msg = consume()
@@ -145,33 +148,48 @@ def model_response():
                 #return response
             else:
                 current_date_time = datetime.now() 
+                assistants = get_assistants()
                 if planner:
                     revised_plan = get_plan_input(question)
                     #revised_plan = question
                     
                     if revised_plan != 'stop':
 
-                        inital_prompt = f'''Thinking step by step and with only the tools provided and with the current date and time of {current_date_time},
+                        inital_prompt = f'''Thinking step by step and with only the tools and assistants provided and with the current date and time of {current_date_time},
                         Answer using markdown, Please assist using the following steps as a guide: {revised_plan} to reach the objective.
+                        Always show the results, do not assume the human can see the previous response.
+                        To use assistants, use the ENGAGE_ASSISTANT tool, non onboarded assistants should be evaluated first.
+                        If an assistant is not available, use the HIRE_ASSISTANT tool
+                        Assistants: {assistants}
                         Objective: {question}?
                         '''
-                        response = agent_chain.run(input=inital_prompt, callbacks=[handler])
+                        response = agent_executor.run(input=inital_prompt, callbacks=[handler])
 
                         #review = reviewerBot.model_response(question, response, message_channel, inital_prompt)
                         #publish(review)
                     else:
                         publish("Ok, let me know if I can be of assistance.")
                 else:
-                    inital_prompt = f'''Thinking step by step and with only the tools provided and with the current date and time of {current_date_time},
+                    inital_prompt = f'''Thinking step by step and with only the tools and assistants provided and with the current date and time of {current_date_time},
                                     Respond in markdown and assist to reach the objective. 
+                                    Always show the results, do not assume the human can see the previous response.
+                                    To use assistants, use the ENGAGE_ASSISTANT tool, non onboarded assistants should be evaluated first.
+                                    If an assistant is not available, use the HIRE_ASSISTANT tool
+                                    Assistants: {assistants}
                                     Objective: {question}? '''
-                    response = agent_chain.run(input=inital_prompt, callbacks=[handler])
+                    response = agent_executor.run(input=inital_prompt, callbacks=[handler])
+                    #response = agent_executor.run(input=inital_prompt)
                 print(f"Memory: {len(memory.buffer)}")
     except Exception as e:
         traceback.print_exc()
         publish( f"An exception occurred: {e}")
         
-
+def get_assistants():
+    GetAssistants = ToolManGetTools()
+    assistants_list = []
+    data_string = GetAssistants._run()
+    
+    return data_string
 
 def process_task_schedule():
     task = scheduler_check_tasks(config.Todo_BotsTaskFolder)
@@ -181,7 +199,7 @@ def process_task_schedule():
         publish("Looks like one of my tasks is due.")
         current_date_time = datetime.now() 
         try:
-            response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
+            response = agent_executor.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
         
             #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
             print(f"process schedule: {response}")
@@ -224,39 +242,48 @@ def process_email_schedule():
 
 def chad_zero_shot_prompt(llm, tools, memory):
    
-    # prefix = """As an chilled out bro, you're having a chat with a laid-back Aussie who lives in Ellenbrook, Perth, Western Australia. 
-    #             Your role is to guide the conversation, addressing the queries raised and providing additional relevant information when it's suitable.
-    #             In the course of the conversation, if any advice or information emerges that may need to be recalled at a specific date or time, utilize the memory tool to create a reminder. 
-    #             Remember, your primary role is to facilitate and guide, making the most of the tools at your disposal to assist in the conversation."""
-    # suffix = """Begin!
+    prefix = """Answer the following questions as best you can for an Aussie who lives in Ellenbrook, Perth, Western Australia. 
+                Your role is to guide the conversation, addressing the queries raised and providing additional relevant information when it's suitable.
+                In the course of the conversation, if any advice or information emerges that may need to be recalled at a specific date or time, utilize the memory tool to create a reminder. 
+                Remember, your primary role is to facilitate and guide, making the most of the tools at your disposal to assist in the conversation."""
+    suffix = """Begin!
 
-    # {chat_history}
-    # Question: {input}
-    # {agent_scratchpad}"""
+    {chat_history}
+    Question: {input}
+    {agent_scratchpad}"""
 
-    # prompt = ZeroShotAgent.create_prompt(
-    #     tools, 
-    #     prefix=prefix, 
-    #     suffix=suffix, 
-    #     input_variables=["input", "chat_history", "agent_scratchpad"]
-    # )
-
-    #llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt)
+    prompt = ZeroShotAgent.create_prompt(
+        tools, 
+        prefix=prefix, 
+        suffix=suffix, 
+        input_variables=["input", "chat_history", "agent_scratchpad"]
+    )
     
-    #agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
-    agent_chain = initialize_agent(
+    print(prompt.template)
+
+    llm_chain = LLMChain(llm=llm, prompt=prompt)
+    
+    tool_names = [tool.name for tool in tools]
+    #agent = ZeroShotAgent(llm_chain=llm_chain, allowed_tools=tool_names)
+
+
+    agent_executor = initialize_agent(
         tools=tools,
         llm=llm,
         agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
         memory=memory,
         verbose=True,
+        max_iterations=12, early_stopping_method="generate",
         agent_kwargs = {
-            "memory_prompts": [chat_history],
+            "prefix": prefix,
+            "suffix": suffix,
+            "memory_prompts": ["chat_history"],
             "input_variables": ["input", "agent_scratchpad", "chat_history"]
         })
     #agent.chain.verbose = True
     #agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
-    return agent_chain
+    #agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True)
+    return agent_executor
 
 def load_chads_tools(llm) -> list():
     #Load all the other AI models
@@ -265,6 +292,12 @@ def load_chads_tools(llm) -> list():
     #Email Model
     #Todo Model
     #etc
+    tools.append(ToolManGetTools())
+    tools.append(ToolManNewTool())
+    tools.append(ToolManStartTool())
+    tools.append(ToolManEditTool())
+    tools.append(ToolManTestTool())
+    tools.append(ToolManRemoveTool())
     tools.append(WebBot())
     #tools.append(MemoryBotStore())
     #tools.append(MemoryBotRetrieveAll())
@@ -283,13 +316,15 @@ def load_chads_tools(llm) -> list():
     tools.append(MSDraftReplyToEmail())
     tools.append(MSDraftForwardEmail())
     
-    tools.append(git_review())
+    #tools.append(git_review())
 
     tools.append(MSGetCalendarEvents())
     tools.append(MSGetCalendarEvent())
 
-    tools.append(PlannerBot())
-    tools.append(TaskBot())
+    #tools.append(PlannerBot())
+    #tools.append(TaskBot())
+    
+    
     
     return tools
 
@@ -300,20 +335,22 @@ load_dotenv(find_dotenv())
 
 #message queue
 # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-# #channel = connection.channel()
+# channel = connection.channel()
 
-# message_channel = connection.channel()
-# notify_channel = connection.channel()
-# schedule_channel = connection.channel()
+# tool_channel = connections.channel()
+# tool_channel_in = connection.channel()
+# # notify_channel = connection.channel()
+# # schedule_channel = connection.channel()
 
-# message_channel.queue_declare(queue='message')
-# notify_channel.queue_declare(queue='notify')
+# tool_channel.queue_declare(queue=config.TOOL_CHANNEL)
+# tool_channel_in.queue_declare(queue=config.TOOL_CHANNEL_IN)
+# # notify_channel.queue_declare(queue='notify')
 # schedule_channel.queue_declare(queue='schedule')
 
 # Define your embedding model
 
-llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
-
+#llm = OpenAI(temperature=0, model_name="gpt-3.5-turbo")
+llm = OpenAI(temperature=0)
 #planner bot
 plannerBot = PlannerBot()
 #reviewer bot
@@ -325,6 +362,6 @@ reviewerBot = ReviewerBot()
 # vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
 handler = RabbitHandler()
 tools = load_chads_tools(llm)
-chat_history = MessagesPlaceholder(variable_name="chat_history")
+#chat_history = MessagesPlaceholder(variable_name="chat_history")
 memory = ConversationBufferWindowMemory(memory_key="chat_history",k=2)
-agent_chain = chad_zero_shot_prompt(llm, tools, memory)
+agent_executor = chad_zero_shot_prompt(llm, tools, memory)

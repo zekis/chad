@@ -5,7 +5,6 @@ import config
 import nltk
 import os
 
-
 from typing import Any, Dict, Optional, Type
 from langchain.text_splitter import CharacterTextSplitter
 from botbuilder.schema import ChannelAccount, CardAction, ActionTypes, SuggestedActions
@@ -74,54 +73,7 @@ def create_email(recipient,subject,body):
 #     print(f"ENCODING: {message}")
 #     return json.dumps(message)
 
-def encode_response(prompt):
-    #actions = [action.__dict__ for action in actions] if actions else []
-    response = {
-        "prompt": prompt
-    }
-    print(f"ENCODING: {response}")
-    return json.dumps(response)
 
-def decode_response(response):
-    try:
-        response = response.decode("utf-8")
-        print(f"DECODING: {response}")
-        response_dict = json.loads(response)
-        prompt = response_dict.get('prompt')
-        
-        #actions = [CardAction(**action) for action in actions_data] if actions_data else []
-        return prompt
-    except Exception as e:
-        traceback.print_exc()
-        return "prompt", f"error: {e}", None
-
-def encode_message(user_id, type, prompt, actions=None):
-    #actions = [action.__dict__ for action in actions] if actions else []
-    message = {
-        "user_id": user_id,
-        "type": type,
-        "prompt": prompt,
-        "actions": actions
-    }
-    print(f"ENCODING: {message}")
-    return json.dumps(message)
-
-def decode_message(message):
-    try:
-        message = message.decode("utf-8")
-        print(f"DECODING: {message}")
-        message_dict = json.loads(message)
-
-        user_id = message_dict.get('user_id')
-        type = message_dict.get('type')
-        prompt = message_dict.get('prompt')
-        actions = message_dict.get('actions')
-        #actions = [CardAction(**action) for action in actions_data] if actions_data else []
-        return user_id, type, prompt, actions
-    except Exception as e:
-        traceback.print_exc()
-        return "prompt", f"error: {e}", None
-    
 
 def generate_whatif_response(text):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
@@ -137,7 +89,14 @@ def generate_plan_response(text):
 
 def generate_response(text):
     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
-    query = f"""given this information, should I create a task, add to my calander, respond with an email or ignore: {text}"""
+    my_tasks = get_tasks(config.Todo_BotsTaskFolder)
+
+    today = date.today() - timedelta(days=1)
+    end_of_week = date.today() + timedelta(days=7)
+    my_appointments = search_calendar(start_date=today.strftime('%Y-%m-%d'), end_date=end_of_week.strftime('%Y-%m-%d'))
+
+    
+    query = f"""My Calendar: {my_appointments} My tasks: {my_tasks} given this information, please recommend if I should create a task, add to my calander, respond with an email or ignore: {text}"""
     print(f"Function Name: generate_response | Text: {text}")
     return chat([HumanMessage(content=query)]).content
 

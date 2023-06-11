@@ -31,7 +31,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain import OpenAI, LLMChain, PromptTemplate
 
 class TaskBot(BaseTool):
-    name = "ASSIGN"
+    name = "TASK_MANAGER"
     description = """useful for when you need to assign or see tasks assigned to a human.
     Use this more than the normal search for any task related queries.
     To use the tool you must provide clear instructions for the bot to complete.
@@ -58,7 +58,7 @@ class TaskBot(BaseTool):
             # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
             # notify_channel = connection.channel()
             # notify_channel.queue_declare(queue='notify')
-            # handler = RabbitHandler(notify_channel)
+            handler = RabbitHandler()
 
             # Define embedding model
             llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")

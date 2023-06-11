@@ -18,8 +18,8 @@ from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSS
 from bots.rabbit_handler import RabbitHandler
 #from bots.utils import encode_message, decode_message, generate_response, validate_response, parse_input, sanitize_string
 from common.rabbit_comms import publish, publish_list, publish_draft_card, publish_draft_forward_card
-from common.utils import generate_response, generate_whatif_response, generate_plan_response
-
+#from common.utils import generate_response, generate_whatif_response, generate_plan_response
+from bots.langchain_assistant import generate_response
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
 from langchain.tools import StructuredTool
@@ -96,14 +96,14 @@ class WebBot(BaseTool):
 
             chain = RetrievalQAWithSourcesChain.from_chain_type(llm=llm, chain_type="stuff", retriever=web_db.as_retriever())
             response = chain({"question": query}, return_only_outputs=True)
-            publish(response)
+            #publish(response)
             
-            return generate_response(response)
+            return response.get('answer')
             
         except Exception as e:
             traceback.print_exc()
-            return """The Input should be a json string with two keys: "website", "query".
-            Or there was a problem with the request."""
+            return f"""The Input should be a json string with two keys: "website", "query".
+            Or there was a problem with the request. {str(e)}"""
         
 
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:

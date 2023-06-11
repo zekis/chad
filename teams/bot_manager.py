@@ -5,7 +5,7 @@ class BotManager:
     def __init__(self):
         self.user_processes = {}
 
-    def handle_command(self, command, user_id=None):
+    def handle_command(self, command, user_id=None, tenant_id=None, user_name=None, email_address=None):
         if user_id:
             if command.lower() == "start":
                 #start the bot
@@ -14,7 +14,7 @@ class BotManager:
                 if user_id in self.user_processes and self.user_processes[user_id].poll() is None:
                     publish(f"Bot is already running for user {user_id}", user_id)
                 else:
-                    process = subprocess.Popen(['python', 'ai.py', user_id])
+                    process = subprocess.Popen(['python', 'ai.py', user_id, tenant_id, user_name, email_address])
                     self.user_processes[user_id] = process
 
             elif command.lower() == "stop":
@@ -37,7 +37,7 @@ class BotManager:
                     self.user_processes[user_id].terminate()
                     self.user_processes[user_id].wait()
                     del self.user_processes[user_id]
-                process = subprocess.Popen(['python', 'ai.py', user_id])
+                process = subprocess.Popen(['python', 'ai.py', user_id, tenant_id, user_name, email_address])
                 self.user_processes[user_id] = process
                 publish(f"Bot restarted.", user_id)
             elif command.lower() == "list_bots":

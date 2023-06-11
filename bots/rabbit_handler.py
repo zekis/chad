@@ -33,7 +33,7 @@ class RabbitHandler(BaseCallbackHandler):
             #"""Run on agent action."""
             #message = encode_message(config.USER_ID,'prompt', message)
             #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            publis(message)
+            publish(f"Thought: {message}")
             #print_text(action.log, color=color if color else self.color)
         observation_pattern = r'Observation: (.*)'
         obs_match = re.search(observation_pattern, action.log)
@@ -43,7 +43,7 @@ class RabbitHandler(BaseCallbackHandler):
             #"""Run on agent action."""
             #message = encode_message(config.USER_ID,'prompt', observation)
             #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            publish(message)
+            publish(f"Observation: {message}")
             #print_text(action.log, color=color if color else self.color)
     
     def on_agent_finish(
@@ -60,7 +60,7 @@ class RabbitHandler(BaseCallbackHandler):
         if message:
             #message = encode_message(config.USER_ID,'on_agent_finish', message)
             #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            publish(message)
+            print(f"Agent Finish: {message}")
 
     def on_chain_end(
         self,
@@ -75,5 +75,5 @@ class RabbitHandler(BaseCallbackHandler):
         if message:
             #message = encode_message(config.USER_ID,'prompt', message)
             #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            publish(message)
+            publish(f"Task Complete: {message}")
 
