@@ -16,8 +16,18 @@ from typing import Any, Dict, Optional, Type
 from bots.rabbit_handler import RabbitHandler
 from common.rabbit_comms import publish, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card
 
-from bots.loaders.outlook import MSCreateEmail, MSGetEmailDetail, MSAutoReplyToEmail, MSSearchEmailsId, MSForwardEmail
-from bots.langchain_search import SearchBot
+from bots.loaders.outlook import (
+    MSSearchEmailsId,
+    MSGetEmailDetail,
+    MSDraftEmail,
+    MSSendEmail,
+    MSReplyToEmail,
+    MSForwardEmail,
+    MSDraftForwardEmail,
+    MSDraftReplyToEmail
+)
+
+from bots.loaders.calendar import MSGetCalendarEvents, MSGetCalendarEvent
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
@@ -50,7 +60,7 @@ class EmailBot(BaseTool):
     """
     #return_direct= True
 
-    def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, text: str, ConversationID: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             print(text)
@@ -74,7 +84,7 @@ class EmailBot(BaseTool):
             handler = RabbitHandler()
             
             # Define embedding model
-            llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+            llm = ChatOpenAI(temperature=0)
             #embeddings_model = OpenAIEmbeddings()
             #embedding_size = 1536
             #index = faiss.IndexFlatL2(embedding_size)
@@ -93,7 +103,7 @@ class EmailBot(BaseTool):
 
     def zero_shot_prompt(self, llm, tools):
     
-        prefix = f"""As an witty assistant bro that likes reading and writing office emails for {config.OFFICE_USER}, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
+        prefix = f"""As an assistant that likes reading and writing office emails for {config.OFFICE_USER}, answering the following questions using markdown in australian localisation formating as best you can. You have access to the following tools:"""
         suffix = """Begin!"
 
         {chat_history}
@@ -112,7 +122,7 @@ class EmailBot(BaseTool):
         # notify_channel.queue_declare(queue='notify')
         # handler = RabbitHandler(notify_channel)
 
-        llm_chain = LLMChain(llm=OpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt)
+        llm_chain = LLMChain(llm=OpenAI(temperature=0), prompt=prompt)
         memory = ConversationBufferMemory(memory_key="chat_history")
         #agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
         #agent.chain.verbose = True
@@ -129,16 +139,19 @@ class EmailBot(BaseTool):
 
     def load_tools(self, llm) -> list():
         tools = []
-        #tools.append(SearchBot())
-        tools.append(MSCreateEmail())
-        tools.append(MSGetEmailDetail())
         tools.append(MSSearchEmailsId())
-        tools.append(MSSearchEmails())
-        tools.append(MSAutoReplyToEmail())
-        #tools.append(MSGetEmailsSubject())
-        # tools.append(MSDraftEmail())
-        # tools.append(MSDraftEmailReply())
-        # tools.append(MSDraftEmailForward())
+        tools.append(MSGetEmailDetail())
+        tools.append(MSDraftEmail())
+        tools.append(MSSendEmail())
+        tools.append(MSReplyToEmail())
+        tools.append(MSForwardEmail())
+        tools.append(MSDraftReplyToEmail())
+        tools.append(MSDraftForwardEmail())
+        
+        #tools.append(git_review())
+
+        tools.append(MSGetCalendarEvents())
+        tools.append(MSGetCalendarEvent())
         
         return tools
 

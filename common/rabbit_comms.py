@@ -11,7 +11,8 @@ from common.card_factories import (
     create_event_card, 
     create_list_card, 
     create_media_card,
-    create_todo_card
+    create_todo_card,
+    create_input_card
 )
 
 #from common.utils import encode_message, decode_message, encode_response, decode_response
@@ -203,7 +204,20 @@ def publish_draft_forward_card(message,email,response):
     message = encode_message(config.USER_ID, "cards", message, cards)
     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
+def publish_input_card(intro,parameters):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
     
+    try:
+        card = create_input_card(intro, parameters)
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message(config.USER_ID, "cards", intro, card)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
 #Consume bot messages
 def consume(override_id=None):
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))

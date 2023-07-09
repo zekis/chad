@@ -49,16 +49,17 @@ def get_tasks(folder_name):
     todo_list = folder.get_tasks()
     return todo_list
 
-
 def generate_response(text):
-    chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
-    my_tasks = get_tasks(config.Todo_BotsTaskFolder)
+    return text
+# def generate_response(text):
+#     chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+#     my_tasks = get_tasks(config.Todo_BotsTaskFolder)
 
-    today = date.today() - timedelta(days=1)
-    end_of_week = date.today() + timedelta(days=7)
-    my_appointments = search_calendar(start_date=today.strftime('%Y-%m-%d'), end_date=end_of_week.strftime('%Y-%m-%d'))
+#     today = date.today() - timedelta(days=1)
+#     end_of_week = date.today() + timedelta(days=7)
+#     my_appointments = search_calendar(start_date=today.strftime('%Y-%m-%d'), end_date=end_of_week.strftime('%Y-%m-%d'))
 
     
-    query = f"""My Calendar: {my_appointments} My tasks: {my_tasks} given this information, please recommend if I should create a todo task, add an appointment to my calander, respond with an email or ignore: {text}"""
-    print(f"Function Name: generate_response | Query: {query}, Text: {text}")
-    return chat([HumanMessage(content=query)]).content
+#     query = f"""My Calendar: {my_appointments} My tasks: {my_tasks} given this information, please recommend if I should create a todo task, add an appointment to my calander, respond with an email or ignore: {text}"""
+#     print(f"Function Name: generate_response | Query: {query}, Text: {text}")
+#     return chat([HumanMessage(content=query)]).content

@@ -341,7 +341,7 @@ class MSCreateTask(BaseTool):
     description = """
     Useful for when you need to create a task.
     To use the tool you must provide the following parameters "folder_name", "task_name", "due_date", "reminder_date", "body".
-    If not sure what folder to create the task in, use the GET_TASK_FOLDERS tool.
+    If not sure what folder to create the task in, use the default folder name 'Tasks' or use the GET_TASK_FOLDERS tool.
     due_date should be in the format "2023-02-28" for a python datetime.date object
     reminder_date should be in the format "2023-02-28" for a python datetime.date object
     Be careful to always use double quotes for strings in the json string
@@ -371,9 +371,9 @@ class MSCreateTask(BaseTool):
                 #expression_if_true if condition else expression_if_false
                 new_task.body = body if body else "Created by AutoCHAD"
                 if due_date:
-                    new_task.due = due_date
+                    new_task.due_date = due_date
                 if reminder_date:
-                    new_task.reminder = reminder_date
+                    new_task.reminder_date = reminder_date
                 new_task.save()
 
                 #ai_summary = get_task_detail(folder_name, task_name)
@@ -386,7 +386,7 @@ class MSCreateTask(BaseTool):
         except Exception as e:
             traceback.print_exc()
             #most likely error
-            return "Could not create task. You must specify a valid folder name, use get_task_folders to get the list of folders"
+            return f"Could not create task. {e}"
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
@@ -472,10 +472,10 @@ class MSUpdateTask(BaseTool):
                     existing_task.body = body
                 if due_date:
                     #date_format = '%Y-%m-%d'
-                    existing_task.due = parser.parse(due_date)
+                    existing_task.due_date = parser.parse(due_date)
                 if reminder_date:
                     #date_format = '%Y-%m-%d'
-                    existing_task.reminder = parser.parse(due_date)
+                    existing_task.reminder_date = parser.parse(due_date)
                 existing_task.save()
                 publish_todo_card("Task Updated", existing_task)
                 return "Task Updated"

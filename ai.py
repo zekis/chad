@@ -1,16 +1,15 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
-import config
 from dotenv import find_dotenv, load_dotenv
 import sys
 import traceback
 import uuid
 import argparse
 from datetime import datetime
-from bots.langchain_openai_master import model_response, process_email_schedule, process_task_schedule
+from bots.langchain_openai_master import model_response, process_email_schedule, process_task_schedule, Init
 from common.rabbit_comms import publish, publish_action
 from common.utils import sanitize_subject
-
+import config
 import asyncio
 import threading
 
@@ -27,8 +26,9 @@ async def email_scheduler():
         await asyncio.sleep(config.Todo_PollingIntervalSeconds / 10)
 
 async def ai_response():
+    Init()
     publish(f"Hi {config.FRIENDLY_NAME}")
-    publish_action("BOT Commands", "GET_ASSISTANTS as list", "BOT_RESTART")
+    publish_action("Get Started", "List available tools", "BOT_RESTART")
     while True:
         #model_selector()
         model_response()

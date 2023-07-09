@@ -11,7 +11,7 @@ APP_PASSWORD = os.getenv("MicrosoftAppPassword")
 BASE_URL = os.getenv("BASE_URL")
 Todo_PollingIntervalSeconds = float(os.getenv("Todo_PollingIntervalSeconds"))
 Todo_BotsTaskFolder = os.getenv("Todo_BotsTaskFolder")
-
+DATA_DIR = "data"
 
 #These are set on startup
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

@@ -100,6 +100,13 @@ def generate_response(text):
     print(f"Function Name: generate_response | Text: {text}")
     return chat([HumanMessage(content=query)]).content
 
+def generate_table(text):
+    chat = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+    
+    query = f"""please convert the following to markdown table:: {text}"""
+    print(f"Function Name: generate_table | Text: {text}")
+    return chat([HumanMessage(content=query)]).content
+
 nltk.download("punkt")
 
 def clean_and_tokenize(text):

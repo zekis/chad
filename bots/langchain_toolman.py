@@ -55,18 +55,20 @@ class ToolManNewTool(BaseTool):
     name = "HIRE_ASSISTANT"
     description = """useful for when you want to hire a new assistant.
     To use the tool you must provide the following parameter "title", "description" and "parameters"
+    Optionaly include "feedback" and test values as "parameter_value_pairs".
     parameters should be an array of parameters the assistant should use as input, for example ['filename', 'content']
+    For APIs and if credentials are required use the GET_CREDENTIAL tool and pass them as additional parameters
     Be careful to always use double quotes for strings in the json string 
     """
     #return_direct= True
 
-    def _run(self,title: str, description: str, parameters: str, changes: str=None, feedback: str=None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self,title: str, description: str, parameters: str, feedback: str=None, parameter_value_pairs: str=None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
 
             attempts = 3
             while attempts > 0:
-                publish_to_manager(config.USER_ID, 'NEW_TOOL', {'toolname': title, 'description': description, 'parameters': parameters})
+                publish_to_manager(config.USER_ID, 'NEW_TOOL', {'toolname': title.lower(), 'description': description, 'parameters': parameters, 'feedback': feedback, 'values': parameter_value_pairs})
                 response = get_manager_response(5)
                 if response == "timeout":
                     attempts -= 1
@@ -88,19 +90,20 @@ class ToolManNewTool(BaseTool):
 class ToolManEditTool(BaseTool):
     name = "UPDATE_ASSISTANT"
     description = """useful for when you want to change the parameters for an existing assistant
-    To use the tool you must provide the following parameter "title", "description" "parameters" "changes" and optional "feedback"
+    To use the tool you must provide the following parameter "title", "description" "parameters" "changes" and optional "feedback" and testing values "parameter_value_pairs"
     feedback allows for the bot to provide comments and feedback to errors or issues that arrise.
     parameters should be an array of parameters the tool should use as input, for example ['filename', 'content']
+    For APIs and if credentials are required use the GET_CREDENTIAL tool and pass them as additional parameters
     Be careful to always use double quotes for strings in the json string 
     """
     #return_direct= True
 
-    def _run(self,title: str, description: str, parameters: str, changes: str, feedback: str=None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self,title: str, description: str, parameters: str, changes: str, feedback: str=None, parameter_value_pairs: str=None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            attempts = 3
+            attempts = 1
             while attempts > 0:
-                publish_to_manager(config.USER_ID, 'EDIT_TOOL', {'toolname': title, 'description': description, 'parameters': parameters, 'changes': changes, 'feedback': feedback})
+                publish_to_manager(config.USER_ID, 'EDIT_TOOL', {'toolname': title.lower(), 'description': description, 'parameters': parameters, 'changes': changes, 'feedback': feedback, 'values': parameter_value_pairs})
                 response = get_manager_response(5)
                 if response == "timeout":
                     attempts -= 1
@@ -132,10 +135,10 @@ class ToolManTestTool(BaseTool):
     def _run(self,title: str, parameters_value_pairs: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            attempts = 3
+            attempts = 1
             while attempts > 0:
-                publish_to_manager(config.USER_ID, 'TEST_TOOL', {'toolname': title, 'values': parameters_value_pairs})
-                response = get_manager_response(2)
+                publish_to_manager(config.USER_ID, 'TEST_TOOL', {'toolname': title.lower(), 'values': parameters_value_pairs})
+                response = get_manager_response(3)
                 if response == "timeout":
                     attempts -= 1
                 elif response:
@@ -154,7 +157,7 @@ class ToolManTestTool(BaseTool):
 
 class ToolManRemoveTool(BaseTool):
     name = "RELIEVE_ASSISTANT"
-    description = """useful for when you want to relieve an existing assistant.
+    description = """useful for when you want to relieve an existing assistant that is not working.
     To use the tool you must provide the following parameter "title"
     Be careful to always use double quotes for strings in the json string 
     """
@@ -163,9 +166,9 @@ class ToolManRemoveTool(BaseTool):
     def _run(self,title: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
-            attempts = 3
+            attempts = 1
             while attempts > 0:
-                publish_to_manager(config.USER_ID, 'REMOVE_TOOL', {'toolname': title})
+                publish_to_manager(config.USER_ID, 'REMOVE_TOOL', {'toolname': title.lower()})
                 response = get_manager_response(1)
                 if response == "timeout":
                     attempts -= 1
@@ -187,7 +190,7 @@ class ToolManStartTool(BaseTool):
     name = "ENGAGE_ASSISTANT"
     description = """useful for when you want the assistants to begin.
     To use the tool you must provide the following parameter "title", "parameters_value_pairs"
-    parameters should be json string of parameters and values that the tool needs to do the job
+    parameters_value_pairs should be json string of parameters and values that the tool needs to do the job
     For example "filename": "test.txt", "content": "hello world"
     Be careful to always use double quotes for strings in the json string 
     """
@@ -197,11 +200,14 @@ class ToolManStartTool(BaseTool):
         """Use the tool."""
         try:
             #request toolman to start tool with the following parameters
-            publish_to_manager(config.USER_ID,"START_TOOL",parameters={'toolname': title})
+            publish_to_manager(config.USER_ID,"START_TOOL",parameters={'toolname': title.lower()})
             #we must wait for the tool to report that it has started
-            if wait_for_tool(title):
-                publish_to_tool(title, parameters_value_pairs)
-                response = get_response(title)
+            if isinstance(parameters_value_pairs, str):
+                parameters_value_pairs = json.loads(parameters_value_pairs)
+
+            if wait_for_tool(title.lower()):
+                publish_to_tool(title.lower(), parameters_value_pairs)
+                response = get_response(title.lower())
                 return json.dumps(response, indent=2, sort_keys=True)
             return "Assistant did not respond"
             
@@ -227,7 +233,7 @@ def get_manager_response(timeout_min=1):
         time.sleep(0.5)
 
 def get_response(toolname, timeout_min=1):
-    response_channel = f"RES:{toolname}:{config.USER_ID}"
+    response_channel = f"RES:{toolname.lower()}:{config.USER_ID}"
     timeout = time.time() + 60*timeout_min   # 5 minutes from now
     while True:
         msg = consume(response_channel)
@@ -238,7 +244,7 @@ def get_response(toolname, timeout_min=1):
         time.sleep(0.5)
 
 def wait_for_tool(toolname):
-    response_channel = f"RES:{toolname}:{config.USER_ID}"
+    response_channel = f"RES:{toolname.lower()}:{config.USER_ID}"
     timeout = time.time() + 60*1   # 5 minutes from now
     while True:
         msg = consume(response_channel)
@@ -299,8 +305,8 @@ def encode_manager_message(bot_channel, command, parameters=None):
     return json.dumps(response)
 
 def publish_to_tool(toolname, parameters):
-    command_channel = f"CMD:{toolname}:{config.USER_ID}"
-    response_queue = f"RES:{toolname}:{config.USER_ID}"
+    command_channel = f"CMD:{toolname.lower()}:{config.USER_ID}"
+    response_queue = f"RES:{toolname.lower()}:{config.USER_ID}"
 
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
     message = encode_tool_message(parameters)

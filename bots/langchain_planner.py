@@ -70,7 +70,7 @@ class PlannerBot(BaseTool):
             tool_details = ""
             for tool in tools:
                 tool_details = tool_details + "\nName: " + tool.name + "\nDescription: " + tool.description + "\n"
-            template="""You are a planner bro who can identify the right tool for the objective. If more then one tool is required, come up with a short todo lists of 1 to 3 tasks. 
+            template="""You are a planner who can identify the right tool for the objective. If more then one tool is required, come up with a short todo lists of 1 to 5 tasks. 
             The objective is: {objective}.
             You have the following tools available {tools}
             """
@@ -80,13 +80,13 @@ class PlannerBot(BaseTool):
             )
 
             chatgpt_chain = LLMChain(
-                llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), 
+                llm=ChatOpenAI(temperature=0), 
                 prompt=prompt, 
                 verbose=True,
                 callbacks=[handler]
             )
             query = f"Given the current data and time of {current_date_time}, {text}"
-            response = chatgpt_chain.run(objective=query, tools=tool_details, callbacks=[handler])
+            response = chatgpt_chain.run(objective=query, tools=tool_details)
 
             return response
         except Exception as e:

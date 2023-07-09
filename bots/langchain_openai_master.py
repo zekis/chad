@@ -12,10 +12,13 @@ import asyncio
 import threading
 
 from bots.rabbit_handler import RabbitHandler
-from bots.langchain_todo import TaskBot
+#from bots.langchain_todo import TaskBot
 #from bots.langchain_search import SearchBot
+
 from bots.langchain_browser import WebBot
-from bots.langchain_memory import MemoryBotRetrieveAll, MemoryBotStore, MemoryBotSearch, MemoryBotDelete, MemoryBotUpdate
+#from bots.langchain_memory import MemoryBotRetrieveAll, MemoryBotStore, MemoryBotSearch, MemoryBotDelete, MemoryBotUpdate
+from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder, MSUpdateTask
+from bots.langchain_credential_manager import GetCredentials, GetCredential, CreateCredential, UpdateCredential, DeleteCredential, CredentialManager
 from bots.loaders.outlook import (
     MSSearchEmailsId,
     MSGetEmailDetail,
@@ -30,13 +33,13 @@ from bots.loaders.outlook import (
 from bots.loaders.calendar import MSGetCalendarEvents, MSGetCalendarEvent
 from bots.langchain_planner import PlannerBot
 #from bots.langchain_outlook import EmailBot
-from bots.langchain_peformance import ReviewerBot
+#from bots.langchain_peformance import ReviewerBot
 
 
 from bots.loaders.todo import scheduler_check_tasks
 from bots.loaders.outlook import scheduler_check_emails
 from bots.loaders.git import git_review
-from bots.langchain_toolman import ToolManGetTools, ToolManNewTool, ToolManStartTool, ToolManEditTool, ToolManTestTool, ToolManRemoveTool
+#from bots.langchain_toolman import ToolManGetTools, ToolManNewTool, ToolManStartTool, ToolManEditTool, ToolManTestTool, ToolManRemoveTool
 from common.rabbit_comms import publish, publish_action, consume
 
 #from bots.utils import encode_message, decode_message, encode_response, decode_response
@@ -61,14 +64,14 @@ from langchain import OpenAI, LLMChain, PromptTemplate
 #from langchain.llms import OpenAI
 from langchain.agents import tool
 from langchain.callbacks import StdOutCallbackHandler
-from langchain.tools.file_management import (
-    ReadFileTool,
-    CopyFileTool,
-    DeleteFileTool,
-    MoveFileTool,
-    WriteFileTool,
-    ListDirectoryTool,
-)
+# from langchain.tools.file_management import (
+#     ReadFileTool,
+#     CopyFileTool,
+#     DeleteFileTool,
+#     MoveFileTool,
+#     WriteFileTool,
+#     ListDirectoryTool,
+# )
 from langchain.agents.agent_toolkits import FileManagementToolkit
 from langchain.vectorstores import FAISS
 from langchain.docstore import InMemoryDocstore
@@ -156,29 +159,35 @@ def model_response():
                     if revised_plan != 'stop':
 
                         inital_prompt = f'''Thinking step by step and with only the tools and assistants provided and with the current date and time of {current_date_time},
-                        Answer using markdown, Please assist using the following steps as a guide: {revised_plan} to reach the objective.
-                        Always show the results, do not assume the human can see the previous response.
-                        To use assistants, use the ENGAGE_ASSISTANT tool, non onboarded assistants should be evaluated first.
-                        If an assistant is not available, use the HIRE_ASSISTANT tool
-                        Assistants: {assistants}
-                        Objective: {question}?
+                        Please assist using the following steps as a guide: {revised_plan}
+                        To reach the objective: {question}
                         '''
+                        #publish(inital_prompt)
                         response = agent_executor.run(input=inital_prompt, callbacks=[handler])
 
                         #review = reviewerBot.model_response(question, response, message_channel, inital_prompt)
                         #publish(review)
+                        #publish(f"Response: {response}")
                     else:
                         publish("Ok, let me know if I can be of assistance.")
                 else:
-                    inital_prompt = f'''Thinking step by step and with only the tools and assistants provided and with the current date and time of {current_date_time},
+#                     inital_prompt = f'''With only the tools and assistants provided and with the current date and time of {current_date_time},
+#                                     Respond in markdown and assist to reach the objective. 
+#                                     Always show the results, do not assume the human can see the previous response.
+#                                     To use assistants, use the GET_ASSISTANTS to list the available assistants. use the ENGAGE_ASSISTANT tool
+#                                     If an assistant is not available, use the HIRE_ASSISTANT tool. You must inlcude credentials as parameters value pairs if they are required.
+                                    
+# Objective: {question} '''
+
+                    inital_prompt = f'''With only the tools provided and with the current date and time of {current_date_time},
                                     Respond in markdown and assist to reach the objective. 
                                     Always show the results, do not assume the human can see the previous response.
-                                    To use assistants, use the ENGAGE_ASSISTANT tool, non onboarded assistants should be evaluated first.
-                                    If an assistant is not available, use the HIRE_ASSISTANT tool
-                                    Assistants: {assistants}
-                                    Objective: {question}? '''
+                                    
+Objective: {question} '''
+                    #publish(inital_prompt)
                     response = agent_executor.run(input=inital_prompt, callbacks=[handler])
                     #response = agent_executor.run(input=inital_prompt)
+                    #publish(f"Response: {response}")
                 print(f"Memory: {len(memory.buffer)}")
     except Exception as e:
         traceback.print_exc()
@@ -199,7 +208,7 @@ def process_task_schedule():
         publish("Looks like one of my tasks is due.")
         current_date_time = datetime.now() 
         try:
-            response = agent_executor.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
+            response = agent_executor.run(input=f'''With only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
         
             #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
             print(f"process schedule: {response}")
@@ -211,74 +220,19 @@ def process_task_schedule():
 
 def process_email_schedule():
     scheduler_check_emails()
-                
-                
-    #             message_channel.basic_publish(exchange='',routing_key='message',body=plan)
-    #         else:
-    #             publish("Ok, let me know if I can be of assistance.")
-    #     #     response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
-    #     except Exception as e:
-    #         publish( f"An exception occurred: {e}")
-    #     # #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
-    #     # print(f"process schedule: {response}")
-    #     # task.body = task.body + "\n" + response
-    #     # task.mark_completed()
-    #     # task.save()
-    
-    #             message_channel.basic_publish(exchange='',routing_key='message',body=plan)
-    #         else:
-    #             publish("Ok, let me know if I can be of assistance.")
-    #     #     response = agent_chain.run(input=f'''With the only the tools provided, With the memory stored the current date and time of {current_date_time}, Please assist in answering the following question by considering each step: {task.subject}? Answer using markdown''', callbacks=[handler])
-    #     except Exception as e:
-    #         publish( f"An exception occurred: {e}")
-    #     # #channel.basic_publish(exchange='',routing_key='message',body=task.subject)
-    #     # print(f"process schedule: {response}")
-    #     # task.body = task.body + "\n" + response
-    #     # task.mark_completed()
-    #     # task.save()
-
-
-    
 
 def chad_zero_shot_prompt(llm, tools, memory):
-   
-    prefix = """Answer the following questions as best you can for an Aussie who lives in Ellenbrook, Perth, Western Australia. 
-                Your role is to guide the conversation, addressing the queries raised and providing additional relevant information when it's suitable.
-                In the course of the conversation, if any advice or information emerges that may need to be recalled at a specific date or time, utilize the memory tool to create a reminder. 
-                Remember, your primary role is to facilitate and guide, making the most of the tools at your disposal to assist in the conversation."""
-    suffix = """Begin!
-
-    {chat_history}
-    Question: {input}
-    {agent_scratchpad}"""
-
-    prompt = ZeroShotAgent.create_prompt(
-        tools, 
-        prefix=prefix, 
-        suffix=suffix, 
-        input_variables=["input", "chat_history", "agent_scratchpad"]
-    )
-    
-    print(prompt.template)
-
-    llm_chain = LLMChain(llm=llm, prompt=prompt)
     
     tool_names = [tool.name for tool in tools]
-    #agent = ZeroShotAgent(llm_chain=llm_chain, allowed_tools=tool_names)
-
 
     agent_executor = initialize_agent(
         tools=tools,
         llm=llm,
         agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-        memory=memory,
         verbose=True,
         max_iterations=12, early_stopping_method="generate",
         agent_kwargs = {
-            "prefix": prefix,
-            "suffix": suffix,
-            "memory_prompts": ["chat_history"],
-            "input_variables": ["input", "agent_scratchpad", "chat_history"]
+            "input_variables": ["input", "agent_scratchpad"]
         })
     #agent.chain.verbose = True
     #agent_chain = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory) 
@@ -292,21 +246,32 @@ def load_chads_tools(llm) -> list():
     #Email Model
     #Todo Model
     #etc
-    tools.append(ToolManGetTools())
-    tools.append(ToolManNewTool())
-    tools.append(ToolManStartTool())
-    tools.append(ToolManEditTool())
-    tools.append(ToolManTestTool())
-    tools.append(ToolManRemoveTool())
+    tools.append(MSGetTaskFolders())
+    tools.append(MSGetTasks())
+    tools.append(MSGetTaskDetail())
+    tools.append(MSSetTaskComplete())
+    tools.append(MSCreateTask())
+    tools.append(MSDeleteTask())
+    tools.append(MSCreateTaskFolder())
+    #tools.append(ToolManGetTools())
+    #tools.append(ToolManNewTool())
+    #tools.append(ToolManStartTool())
+    #tools.append(ToolManEditTool())
+    #tools.append(ToolManTestTool())
+    #tools.append(ToolManRemoveTool())
     tools.append(WebBot())
     #tools.append(MemoryBotStore())
     #tools.append(MemoryBotRetrieveAll())
     #tools.append(MemoryBotSearch())
     #tools.append(MemoryBotUpdate())
     #tools.append(MemoryBotDelete())
+    tools.append(GetCredentials())
+    tools.append(GetCredential())
+    tools.append(CreateCredential())
+    tools.append(UpdateCredential())
+    tools.append(DeleteCredential())
     #tools.append(EmailBot())
-    #added the ability for the master to email directly
-    #tools.append(MSSearchEmails())
+
     tools.append(MSSearchEmailsId())
     tools.append(MSGetEmailDetail())
     tools.append(MSDraftEmail())
@@ -315,46 +280,36 @@ def load_chads_tools(llm) -> list():
     tools.append(MSForwardEmail())
     tools.append(MSDraftReplyToEmail())
     tools.append(MSDraftForwardEmail())
-    
-    #tools.append(git_review())
 
     tools.append(MSGetCalendarEvents())
     tools.append(MSGetCalendarEvent())
+    #added the ability for the master to email directly
+    #tools.append(MSSearchEmails())
+    
 
-    #tools.append(PlannerBot())
+    tools.append(PlannerBot())
     #tools.append(TaskBot())
-    
-    
-    
+
     return tools
 
+def Init():
+    
+    credentials = CredentialManager(config.DATA_DIR, config.USER_ID)
+    credentials.load_credentials()
+    response = credentials.get_credential('graph_api')
+    #print(f"Credential {config.DATA_DIR} {config.USER_ID} {response}")
+    if response:
+        credentials.delete_credential('graph_api')
+    credentials.add_credential('graph_api', {"application_id": config.APP_ID, "application_password": config.APP_PASSWORD, "tenantID": config.TENANT_ID, "main_resource": config.OFFICE_USER} )
+    credentials.save_credentials()
 
-
-#config
-load_dotenv(find_dotenv())
-
-#message queue
-# connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-# channel = connection.channel()
-
-# tool_channel = connections.channel()
-# tool_channel_in = connection.channel()
-# # notify_channel = connection.channel()
-# # schedule_channel = connection.channel()
-
-# tool_channel.queue_declare(queue=config.TOOL_CHANNEL)
-# tool_channel_in.queue_declare(queue=config.TOOL_CHANNEL_IN)
-# # notify_channel.queue_declare(queue='notify')
-# schedule_channel.queue_declare(queue='schedule')
-
-# Define your embedding model
-
-#llm = OpenAI(temperature=0, model_name="gpt-3.5-turbo")
-llm = OpenAI(temperature=0)
+#llm = OpenAI(temperature=0)
+llm = ChatOpenAI(model_name='gpt-4')
 #planner bot
 plannerBot = PlannerBot()
 #reviewer bot
-reviewerBot = ReviewerBot()
+#reviewerBot = ReviewerBot()
+#credential manager
 
 # embeddings_model = OpenAIEmbeddings()
 # embedding_size = 1536

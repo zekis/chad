@@ -537,7 +537,7 @@ def create_todo_card(message,event):
                     {
                         "type": "TextBlock",
                         "spacing": "none",
-                        "text": f"Due {event.due.strftime('%Y-%m-%d %H:%M')}",
+                        "text": f"Due {event.due_date.strftime('%Y-%m-%d %H:%M')}",
                         "isSubtle": True,
                         "wrap": True
                     },
@@ -563,3 +563,54 @@ def create_todo_card(message,event):
     }
 
     return json.dumps(cards)
+
+def create_input_card(intro, parameters):
+    # Begin creating card body with initial text block
+    card_body = [
+        {
+            "type": "TextBlock",
+            "text": intro
+        }
+    ]
+
+    # Loop through parameters and create input fields for each
+    for param in parameters:
+        card_body.append(
+            {
+                "type": "TextBlock",
+                "text": param['label']
+            }
+        )
+        
+        input_field = {
+            "type": "Input.Text",
+            "id": param['id'],
+            "placeholder": param.get('placeholder', "Enter value"),
+            "maxLength": param.get('maxLength', 500)
+        }
+        
+        # Add multiline if specified
+        if param.get('isMultiline', False):
+            input_field["isMultiline"] = True
+        
+        # Add pre-filled value if specified
+        if 'value' in param:
+            input_field["value"] = param['value']
+
+        # Append the input field to the card body
+        card_body.append(input_field)
+
+    # Create card with body and submit action
+    card = {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": card_body,
+        "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "OK"
+            }
+        ]
+    }
+
+    return json.dumps(card)

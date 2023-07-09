@@ -61,7 +61,7 @@ class TaskBot(BaseTool):
             handler = RabbitHandler()
 
             # Define embedding model
-            llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+            llm = ChatOpenAI(model_name='gpt-4')
             embeddings_model = OpenAIEmbeddings()
             embedding_size = 1536
             index = faiss.IndexFlatL2(embedding_size)
@@ -94,7 +94,7 @@ class TaskBot(BaseTool):
             input_variables=["input", "chat_history", "agent_scratchpad"]
         )
 
-        llm_chain = LLMChain(llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), prompt=prompt)
+        llm_chain = LLMChain(llm = ChatOpenAI(model_name='gpt-4'), prompt=prompt)
         memory = ConversationBufferMemory(memory_key="chat_history")
         agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
         #agent.chain.verbose = True

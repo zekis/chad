@@ -58,7 +58,7 @@ class WebBot(BaseTool):
     Do not use escape characters
     Be careful to always use single quotes for strings in the json string
     """
-    return_direct= True
+    return_direct= False
 
     def _run(self, website: str = None, query: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
@@ -79,8 +79,8 @@ class WebBot(BaseTool):
             #     chunk_overlap  = 20,
             #     length_function = len,
             # )
-            
-            loader = WebBaseLoader(website)
+            hwebsite = ensure_http_or_https(website)
+            loader = WebBaseLoader(hwebsite)
             documents = loader.load()
 
             text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -110,3 +110,9 @@ class WebBot(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("BROWSE does not support async")
 
+def ensure_http_or_https(url):
+    if not url.startswith('http://') and not url.startswith('https://'):
+        # Add https:// if the URL does not start with http:// or https://
+        return 'https://' + url
+    # If it already starts with http:// or https://, return it as is
+    return url
