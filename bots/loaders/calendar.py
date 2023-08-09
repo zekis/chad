@@ -1,10 +1,7 @@
 import traceback
 import config
-from dotenv import find_dotenv, load_dotenv
-#from flask import request
-import json
-import os
-import re
+import datetime as dt
+
 import pika
 import shutil
 
@@ -15,40 +12,15 @@ from dateutil import parser
 from typing import Any, Dict, Optional, Type
 from bots.langchain_assistant import generate_response
 
-#from teams.card_factories import create_list_card, create_event_card
 from common.rabbit_comms import publish, publish_event_card, publish_list
-#from common.utils import generate_response, generate_whatif_response, generate_plan_response
-from common.utils import validate_response, parse_input
+
 
 from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
-from langchain.tools import StructuredTool
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
-#from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.document_loaders import UnstructuredHTMLLoader
-from langchain.docstore.document import Document
-from bs4 import BeautifulSoup
 
 from langchain.chat_models import ChatOpenAI
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.llms import OpenAI
-from langchain.chains import RetrievalQA
-
-from langchain.schema import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage
-)
-
-
-load_dotenv(find_dotenv())
-embeddings = OpenAIEmbeddings()
-
 
 ### With your own identity (auth_flow_type=='credentials') ####
 def authenticate():
@@ -115,13 +87,14 @@ class MSGetCalendarEvents(BaseTool):
                 title_message = f"Events Scheduled {start_date} - {end_date}"
                 publish_list(title_message, human_summary)
                 #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
+                return "Done"
             else:
                 return "No events"
             
             #return ai_summary
             return generate_response(ai_summary)
         except Exception as e:
-            
+            traceback.print_exc()
             return f'To use the tool you must provide the following parameters "start_date" "end_date"'
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
@@ -152,7 +125,7 @@ class MSGetCalendarEvent(BaseTool):
                 title_message = f"Event Review"
                 publish_event_card(title_message, event)
                 #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
-                return generate_response(ai_summary)
+                return "Done"
             
             
             return "No events"
@@ -166,3 +139,61 @@ class MSGetCalendarEvent(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("GET_CALENDAR_EVENTS does not support async")
 
+class MSCreateCalendarEvent(BaseTool):
+    name = "CREATE_CALENDAR_EVENT"
+    description = """useful for when you need to create a meetings or appointment in the humans calander
+    To use the tool you must provide the following parameters "subject", "start_datetime" and "end_datetime" format as %Y-%m-%d %H:%M:%S
+    Optional parameters include "is_all_day", "location" and "remind_before_minutes"
+    Be careful to always use double quotes for strings in the json string 
+    """
+
+    return_direct= True
+    def _run(self, subject, start_datetime: str, end_datetime: str, is_all_day: str = None, location: str = None, remind_before_minutes: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+        """Use the tool."""
+        try:
+            # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+            # notify_channel = connection.channel()
+            # notify_channel.queue_declare(queue='notify')
+            
+            ai_summary = ""
+            human_summary = []
+
+            account = authenticate()
+            schedule = account.schedule()
+            calendar = schedule.get_default_calendar()
+            new_event = calendar.new_event()
+
+            format = "%Y-%m-%d %H:%M:%S"
+            formatted_start_datetime = dt.datetime.strptime(start_datetime, format)
+            formatted_end_datetime = dt.datetime.strptime(end_datetime, format)
+
+            new_event.subject = subject
+            new_event.start = formatted_start_datetime
+            if is_all_day:
+                new_event.is_all_day = is_all_day
+            else:
+                new_event.end = formatted_end_datetime
+            
+            
+            if location:
+                new_event.location = location
+            
+            if remind_before_minutes:
+                new_event.remind_before_minutes = remind_before_minutes
+
+            new_event.save()    
+        
+            ai_summary = "New Calander Event: " + new_event.subject + ", At " + new_event.start.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
+            title_message = f"New Calander Event"
+            publish_event_card(title_message, new_event)
+            #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
+            return "Done"
+
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
+            return f'To use the tool you must provide the following parameters "subject" "start_date" "end_date"'
+    
+    async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+        """Use the tool asynchronously."""
+        raise NotImplementedError("CREATE_CALENDAR_EVENT does not support async")

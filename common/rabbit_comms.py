@@ -9,7 +9,8 @@ from common.card_factories import (
     create_draft_reply_email_card, 
     create_email_card, 
     create_event_card, 
-    create_list_card, 
+    create_list_card,
+    create_folder_list_card, 
     create_media_card,
     create_todo_card,
     create_input_card
@@ -28,13 +29,13 @@ def encode_response(prompt):
     response = {
         "prompt": prompt
     }
-    print(f"ENCODING: {response}")
+    #print(f"ENCODING: {response}")
     return json.dumps(response)
 
 def decode_response(response):
     try:
         response = response.decode("utf-8")
-        print(f"DECODING: {response}")
+        #print(f"DECODING: {response}")
         response_dict = json.loads(response)
         prompt = response_dict.get('prompt')
         
@@ -52,13 +53,13 @@ def encode_message(user_id, type, prompt, actions=None):
         "prompt": prompt,
         "actions": actions
     }
-    print(f"ENCODING: {message}")
+    #print(f"ENCODING: {message}")
     return json.dumps(message)
 
 def decode_message(message):
     try:
         message = message.decode("utf-8")
-        print(f"DECODING: {message}")
+        #print(f"DECODING: {message}")
         message_dict = json.loads(message)
 
         user_id = message_dict.get('user_id')
@@ -82,8 +83,10 @@ def publish(message, override_id=None):
     notify_channel.basic_publish(exchange='',
                       routing_key='notify',
                       body=message)
-    print(message)
+    #print(message)
     notify_channel.close()
+
+
 
 def publish_action(message, button1, button2, override_id=None):
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
@@ -107,8 +110,33 @@ def publish_action(message, button1, button2, override_id=None):
     notify_channel.basic_publish(exchange='',
                       routing_key='notify',
                       body=message)
-    print(message)
+    #print(message)
     notify_channel.close()
+
+def publish_actions(message, buttons, override_id=None):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+
+    actions = [CardAction(
+        type=ActionTypes.im_back,
+        title=button[0],
+        value=button[1],
+        mode="secondary"
+    ) for button in buttons]
+
+    actions = [action.__dict__ for action in actions] if actions else []
+
+    if not override_id:
+        message = encode_message(config.USER_ID, 'action', message, actions)
+    else:
+        message = encode_message(override_id, 'action', message, actions)
+
+    notify_channel = connection.channel()
+    notify_channel.basic_publish(exchange='',
+                      routing_key='notify',
+                      body=message)
+    #print(message)
+    notify_channel.close()
+
 
 def publish_list(message,strings_values):
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
@@ -118,6 +146,22 @@ def publish_list(message,strings_values):
     #convert string to dict (hopefully our AI has formatted it correctly)
     try:
         cards = create_list_card(message,strings_values)
+        #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
+    except Exception as e:
+        traceback.print_exc()
+        cards = None
+    
+    message = encode_message(config.USER_ID, "cards", message, cards)
+    notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
+
+def publish_folder_list(message,strings_values):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    notify_channel = connection.channel()
+    notify_channel.queue_declare(queue='notify')
+    
+    #convert string to dict (hopefully our AI has formatted it correctly)
+    try:
+        cards = create_folder_list_card(message,strings_values)
         #cards = create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
     except Exception as e:
         traceback.print_exc()
@@ -186,7 +230,7 @@ def publish_draft_card(message,email,response, reply=False):
         traceback.print_exc()
         cards = None
     
-    message = encode_message("cards", message, cards)
+    message = encode_message(config.USER_ID, "cards", message, cards)
     notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
 
 def publish_draft_forward_card(message,email,response):
@@ -234,6 +278,14 @@ def consume(override_id=None):
         return response
     else:
         return None
+
+#clear bots messages (do this on start)
+def clear_queue(id):
+    print("Clearing message queue")
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    message_channel = connection.channel()
+    message_channel.queue_delete(id)
+    message_channel.queue_declare(id)
 
 #Send to the bot
 def send_to_bot(user_id, message):

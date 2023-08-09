@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 from bots.rabbit_handler import RabbitHandler
-
+from common.rabbit_comms import publish_actions, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card, send_to_bot
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain import ConversationChain, LLMChain, PromptTemplate
 from langchain.chat_models import ChatOpenAI
@@ -22,7 +22,6 @@ from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.tools import BaseTool
 
-load_dotenv(find_dotenv())
 
 
 class PlannerBot(BaseTool):
@@ -32,7 +31,11 @@ class PlannerBot(BaseTool):
     Output: a todo list for that objective. 
     Please be very clear what the objective is!
     """
+    return_direct= True
+    tools = []
 
+    def init(self, tools):
+        self.tools = tools
     
 
     def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
@@ -42,7 +45,11 @@ class PlannerBot(BaseTool):
 
             
 
-            return self.model_response(text, tools)
+            plan = self.model_response(text, self.tools)
+            buttons = [("Proceed", "Thinking step by step, action each of the following items in the plan using the tools available plan: "+ plan)]
+            publish_actions(plan,buttons)
+            #send_to_bot(config.USER_ID,plan)
+            return "Done"
         except Exception as e:
             return repr(e)
     
@@ -51,20 +58,12 @@ class PlannerBot(BaseTool):
         raise NotImplementedError("PlannerBot does not support async")
 
     #this bot needs to provide similar commands as autoGPT except the commands are based on Check Email, Check Tasks, Load Doc, Load Code etc.
-    def model_response(self, text, tools):
+    def model_response(self, text, tools=None):
         try:
             #config
             
-            load_dotenv(find_dotenv())
+            
             current_date_time = datetime.now()
-            # Define embedding model
-            #prompt = "You are a planner who is an expert at coming up with a todo list."
-            #template = "Come up with a todo list for this objective: {text}"
-            #chat = OpenAI(temperature=0)
-            # connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-            # notify_channel = connection.channel()
-            # notify_channel.queue_declare(queue='notify')
-           
             handler = RabbitHandler()
 
             tool_details = ""

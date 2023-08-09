@@ -1,5 +1,5 @@
 import subprocess
-from common.rabbit_comms import publish
+from common.rabbit_comms import publish, clear_queue
 
 class BotManager:
     def __init__(self):
@@ -14,8 +14,23 @@ class BotManager:
                 if user_id in self.user_processes and self.user_processes[user_id].poll() is None:
                     publish(f"Bot is already running for user {user_id}", user_id)
                 else:
+                    clear_queue(user_id)
                     process = subprocess.Popen(['python', 'ai.py', user_id, tenant_id, user_name, email_address])
                     self.user_processes[user_id] = process
+
+            elif command.lower() == "quiet_start":
+                #start the bot
+                """start the bot"""
+                if user_id in self.user_processes and self.user_processes[user_id].poll() is None:
+                    #publish(f"Bot is already running for user {user_id}", user_id)
+                    """do nothing"""
+                    return
+                else:
+                    publish(f"Starting bot for user {user_id}...", user_id)
+                    clear_queue(user_id)
+                    process = subprocess.Popen(['python', 'ai.py', user_id, tenant_id, user_name, email_address])
+                    self.user_processes[user_id] = process
+                    return
 
             elif command.lower() == "stop":
                 #stop the bot
@@ -32,6 +47,7 @@ class BotManager:
             elif command.lower() == "restart":
                 #stop the bot
                 """restart the bot"""
+                clear_queue(user_id)
                 publish(f"Restarting bot.", user_id)
                 if user_id in self.user_processes:
                     self.user_processes[user_id].terminate()

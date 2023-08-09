@@ -7,7 +7,7 @@ import uuid
 import argparse
 from datetime import datetime
 from bots.langchain_openai_master import model_response, process_email_schedule, process_task_schedule, Init
-from common.rabbit_comms import publish, publish_action
+from common.rabbit_comms import publish, publish_action, publish_actions
 from common.utils import sanitize_subject
 import config
 import asyncio
@@ -28,7 +28,9 @@ async def email_scheduler():
 async def ai_response():
     Init()
     publish(f"Hi {config.FRIENDLY_NAME}")
-    publish_action("Get Started", "List available tools", "BOT_RESTART")
+    #publish_action("Get Started", "List available tools", "BOT_RESTART")
+    buttons = [("Check my tasks", "Show me a list of my task folders"),("Check the weather", "Check the weather for my saved location"),("Check emails", "Did I get any emails today?"), ("Book a meeting", "Book a meeting for tomorrow morning"), ("Draft an email", "Draft an email"), ("Research AI news", "Research AI news"), ("Restart BOT", "bot_restart")]
+    publish_actions("How can I help you today?", buttons)
     while True:
         #model_selector()
         model_response()
@@ -52,14 +54,11 @@ if __name__ == "__main__":
     parser.add_argument("email_address", type=str, help="Email Address")
     args = parser.parse_args()
     config.USER_ID = args.user_id
-    # config.TOOL_CHANNEL_IN = f"TOOL:IN:{config.USER_ID}"
-    # config.TOOL_CHANNEL_OUT = f"TOOL_OUT:{config.USER_ID}"
-    #config.TOOL_COMMAND_CHANNEL = f"CMD:{toolname}:{config.USER_ID}"
-    #config.TOOL_RESPONSE_CHANNEL = f"RES:{toolname}:{config.USER_ID}"
-    
     config.TENANT_ID = args.tenant_id
     config.FRIENDLY_NAME = args.user_name
     config.OFFICE_USER = args.email_address
     config.EMAIL_CACHE_FILE_NAME = "workspace/" + sanitize_subject(args.user_id,1000) + ".txt"
     config.LOCAL_MEMORY_FILE_NAME = "workspace/" + sanitize_subject(args.user_id,1000) + "txt"
+
+    # Need to check for GPT API key here and request key before starting bot
     asyncio.run(main())

@@ -27,16 +27,46 @@ def create_list_card(message,strings_values):
         "actions": [
             {
                 "type": "Action.Submit",
-                "title": "Summarise",
+                "title": "Open",
                 "id": "btnSummary"
+            }
+        ]
+    }
+
+    for index, (title, value) in enumerate(strings_values):
+        cards["body"][1]["choices"].append({
+            "title": title,
+            "value": value
+        })
+
+    return json.dumps(cards)
+
+def create_folder_list_card(message,strings_values):
+    cards = {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+            {
+                "type": "TextBlock",
+                "size": "medium",
+                "weight": "Bolder",
+                "horizontalAlignment": "Left",
+                "text": message
             },
             {
+                "type": "Input.ChoiceSet",
+                "id": "acDecision",
+                "value": "1",
+                "wrap": True,
+                "choices": [],
+                "style": "expanded"
+            }
+        ],
+        "actions": [
+            {
                 "type": "Action.Submit",
-                "title": "Read Aloud",
-                "id": "btnReadAloud",
-                "data": {
-                    "create_tts": f"{message}"
-                }
+                "title": "Show Selected",
+                "id": "btnSummary"
             }
         ]
     }
@@ -51,6 +81,7 @@ def create_list_card(message,strings_values):
 
 
 def create_email_card(message,email, summary):
+    link = f"https://outlook.office.com/mail/inbox/id/{email.object_id}"
     cards = {
         "type": "AdaptiveCard",
         "version": "1.2",
@@ -116,34 +147,42 @@ def create_email_card(message,email, summary):
         ],
         "actions": [
             {
+                "type": "Action.OpenUrl",
+                "title": "Open in Outlook",
+                "url": link
+            },
+            {
                 "type": "Action.Submit",
                 "title": "Draft Reply Email",
+                "mode": "secondary",
                 "data": {
-                    "acDecision": f"Please use the DRAFT_REPLY_TO_EMAIL tool using ConverstationID: {email.conversation_id} to draft a response"
+                    "acDecision": f"Please use the DRAFT_REPLY_TO_EMAIL tool using ConverstationID: {email.conversation_id} to draft a response from Chad-Bot on behalf of {config.FRIENDLY_NAME}"
                 }
             },
             {
                 "type": "Action.Submit",
                 "title": "Draft Forward Email",
+                "mode": "secondary",
                 "data": {
-                    "acDecision": f"Please use the DRAFT_FORWARD_TO_EMAIL tool using ConverstationID: {email.conversation_id} to draft a response"
+                    "acDecision": f"Please use the DRAFT_FORWARD_TO_EMAIL tool using ConverstationID: {email.conversation_id} to draft a response from Chad-Bot on behalf of {config.FRIENDLY_NAME}"
                 }
                 
             },
             {
                 "type": "Action.Submit",
                 "title": "Create Task",
+                "mode": "secondary",
                 "data": {
-                    "acDecision": f"Please use the TASK_MANAGER tool to create an action for me to do based on the email following summary: {summary}"
+                    "acDecision": f"Please use the CREATE_TASK tool to create an action for me to do based on the email following summary: {summary}"
                 }
                 
             },
             {
                 "type": "Action.Submit",
-                "title": "Read Aloud",
-                "id": "btnReadAloud",
+                "title": "Create Meeting",
+                "mode": "secondary",
                 "data": {
-                    "create_tts": f"{message}"
+                    "acDecision": f"Please use the CREATE_CALANDER_EVENT tool to create an meeting for me to do based on the email summary: {summary}"
                 }
             }
 
@@ -231,16 +270,9 @@ def create_draft_email_card(message,email,response):
             {
                 "type": "Action.Submit",
                 "title": "Modify",
+                "mode": "secondary",
                 "data": {
                     "acDecision": f"Please use the DRAFT_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
-                }
-            },
-            {
-                "type": "Action.Submit",
-                "title": "Read Aloud",
-                "id": "btnReadAloud",
-                "data": {
-                    "create_tts": f"{message}"
                 }
             }
             
@@ -328,17 +360,10 @@ def create_draft_reply_email_card(message,email,response):
             {
                 "type": "Action.Submit",
                 "title": "Modify",
+                "mode": "secondary",
                 "data": {
                     "acDecision": f"Please use the DRAFT_REPLY_TO_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
                 }
-            },
-            {
-                "type": "Action.Submit",
-                "title": "Read Aloud",
-                "data": {
-                    "create_tts": f"{message}"
-                }
-                
             }
             
         ]
@@ -424,16 +449,9 @@ def create_draft_forward_email_card(message,email,response):
             {
                 "type": "Action.Submit",
                 "title": "Modify",
+                "mode": "secondary",
                 "data": {
                     "acDecision": f"Please use the DRAFT_FORWARD_TO_EMAIL tool using ConverstationID: {email.conversation_id} to create a new draft based on the current draft: {response}"
-                }
-            },
-            {
-                "type": "Action.Submit",
-                "title": "Read Aloud",
-                "id": "btnReadAloud",
-                "data": {
-                    "create_tts": f"{message}"
                 }
             }
             
@@ -443,6 +461,7 @@ def create_draft_forward_email_card(message,email,response):
     return json.dumps(cards)
 
 def create_event_card(message,event):
+    link = f"https://outlook.office.com/calendar/item/{event.object_id}"
     cards = {
         "type": "AdaptiveCard",
         "version": "1.2",
@@ -480,7 +499,15 @@ def create_event_card(message,event):
                 ]
             }
             
+        ],
+        "actions": [
+            {
+                "type": "Action.OpenUrl",
+                "title": "Open in Outlook",
+                "url": link
+            },
         ]
+        
     }
 
     return json.dumps(cards)
@@ -514,9 +541,11 @@ def create_media_card(message, url):
     # """
 
 def create_todo_card(message,event):
+    link = f"https://to-do.office.com/tasks/id/{event.task_id}"
     cards = {
         "type": "AdaptiveCard",
-        "version": "1.2",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",  
+        "version": "1.4",
         "body": [
             {
                 "type": "Container",
@@ -526,7 +555,7 @@ def create_todo_card(message,event):
                         "size": "medium",
                         "weight": "Bolder",
                         "horizontalAlignment": "Left",
-                        "text": message
+                        "text": "Microsoft Todo Task"
                     },
                     {
                         "type": "TextBlock",
@@ -537,7 +566,7 @@ def create_todo_card(message,event):
                     {
                         "type": "TextBlock",
                         "spacing": "none",
-                        "text": f"Due {event.due_date.strftime('%Y-%m-%d %H:%M')}",
+                        "text": f"Due: {event.due}",
                         "isSubtle": True,
                         "wrap": True
                     },
@@ -552,14 +581,20 @@ def create_todo_card(message,event):
                     {
                         "type": "TextBlock",
                         "spacing": "none",
-                        "text": f"Completed {event.importance}",
+                        "text": f"Details: {event.body}",
                         "isSubtle": True,
                         "wrap": True
                     }
-                ]
+                ],
             }
-            
-        ]
+        ],
+            "actions": [
+                {
+                    "type": "Action.OpenUrl",
+                    "title": "Open in Todo",
+                    "url": link
+                }
+            ]
     }
 
     return json.dumps(cards)

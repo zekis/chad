@@ -1,3 +1,5 @@
+import traceback
+
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
@@ -8,10 +10,12 @@ from langchain.schema import AgentAction, AgentFinish, LLMResult
 from common.utils import generate_table
 # import pika
 import re
+import json
+import traceback
 #import config
 #from bots.utils import encode_message, decode_message
-from common.rabbit_comms import publish, publish_action, consume
-
+from common.rabbit_comms import publish, publish_action, consume, publish_actions
+from bots.langchain_assistant import generate_commands
 class RabbitHandler(BaseCallbackHandler):
 
     #message_channel = pika.BlockingConnection()
@@ -52,17 +56,17 @@ class RabbitHandler(BaseCallbackHandler):
     #         #print_text(action.log, color=color if color else self.color)
     
 
-    def on_tool_end(
-        self,
-        output: str,
-        *,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        **kwargs: Any,
-    ) -> None:
-        """Run when tool ends running."""
-        #table = generate_table(output)
-        #publish(f"{table}")
+    # def on_tool_end(
+    #     self,
+    #     output: str,
+    #     *,
+    #     run_id: UUID,
+    #     parent_run_id: Optional[UUID] = None,
+    #     **kwargs: Any,
+    # ) -> None:
+    #     """Run when tool ends running."""
+    #     #table = generate_table(output)
+    #     #publish(f"{table}")
 
     def on_tool_error(
         self,
@@ -84,13 +88,16 @@ class RabbitHandler(BaseCallbackHandler):
         parent_run_id: Optional[UUID] = None,
         **kwargs: Any,
     ) -> Any:
-        #print(f"on_agent_finish Callback {finish.return_values}")
-        #print(f"on_agent_finish Callback {finish.log}")
-        message = finish
-        if message:
-            #message = encode_message(config.USER_ID,'on_agent_finish', message)
-            #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            print(f"Agent Finish: {message}")
+        try:
+            print(f"on_agent_finish Callback {finish}")
+            #print(f"on_agent_finish Callback {finish.log}")
+            message = finish
+            if message:
+                #message = encode_message(config.USER_ID,'on_agent_finish', message)
+                #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
+                print(f"Agent Finish: {message}")
+        except Exception as e:
+            traceback.print_exc()
 
     def on_chain_end(
         self,
@@ -100,48 +107,49 @@ class RabbitHandler(BaseCallbackHandler):
         parent_run_id: Optional[UUID] = None,
         **kwargs: Any,
     ) -> Any:
-        #print(f"on_chain_end Callback {outputs}")
-        #message = outputs.get("output")
-        message = outputs
-        text = message.get("text")
-        if text:
-            #message = encode_message(config.USER_ID,'prompt', message)
-            #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            #text = text[:text.find('\n')] if '\n' in text else text
-            # action_pattern = r'Action: (.*)'
-            # act_match = re.search(action_pattern, text)
+        try:
+            print(f"on_chain_end Callback {outputs}")
+            #response = outputs.get("output")
+            #look for output
 
-            # print(f"act_match: {act_match}")
+            #look for text
+            if outputs:
 
-            # if act_match:
-            #     action_json = act_match.group(1)
-            #     print(action_json)
-            #     if action_json:
-            #         action_json = json.loads(action_json)
-            #         action = action_json.get("action")
-            #         action_input = action_json.get("action_input")
-            #         #if action != "Final Answer":
-            #         publish(f"{action} {action_input}")
-                #print("Thought:", thought)
-                #"""Run on agent action."""
-                #message = encode_message(config.USER_ID,'prompt', observation)
-                #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-                #publish(f"Observation: {message}")
-                #print_text(action.log, color=color if color else self.color)
+                # Convert the string to dictionary
+                #dict_str = eval(outputs)
 
-            publish(f"{text}")
+                # Extract 'text' content
+                text_content = outputs.get("text")
+                output_content = outputs.get("output")
 
-    def on_chain_error(
-        self,
-        error: Union[Exception, KeyboardInterrupt],
-        *,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Run when chain errors."""
-        if error:
-            #message = encode_message(config.USER_ID,'prompt', message)
-            #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-            print(f"Error: {error}")
-            return str(error)
+                if text_content:
+                    # Extract text part without JSON string
+                    text_without_json = text_content.split('```')[0].strip()
+                    text_without_prefixes = text_without_json.replace('Thought: ','').replace('Action:', '').replace('\n','')
+                    
+                    publish(f"{text_without_prefixes}")
+                
+                if output_content:
+                    #publish(f"{output_content}")
+                    buttons = [("Creating an Email", f"Create an email with the following: {output_content}"),("Creating a Task", f"Create a task with the following: {output_content}"),("Creating a Meeting", f"Create a meeting to discuss the following: {output_content}")]
+                    #buttons = generate_commands(output_content)
+                    feedback = f"""{output_content}. Is there anything else I can do?"""
+                    #publish_actions(feedback, buttons)
+        except Exception as e:
+            traceback.print_exc()
+            #return e
+
+    # def on_chain_error(
+    #     self,
+    #     error: Union[Exception, KeyboardInterrupt],
+    #     *,
+    #     run_id: UUID,
+    #     parent_run_id: Optional[UUID] = None,
+    #     **kwargs: Any,
+    # ) -> Any:
+    #     """Run when chain errors."""
+    #     if error:
+    #         #message = encode_message(config.USER_ID,'prompt', message)
+    #         #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
+    #         print(f"Chain Error: {error}")
+    #         return str(error)

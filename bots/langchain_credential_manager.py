@@ -77,7 +77,7 @@ class CredentialManager:
 
 class GetCredentials(BaseTool):
     name = "GET_CREDENTIALS"
-    description = """useful for when you want to retrieve a list of availabe credentials.
+    description = """useful for when you want to retrieve a list of availabe credentials or memories.
     """
     #return_direct= True
 
@@ -101,7 +101,7 @@ class GetCredentials(BaseTool):
 
 class GetCredential(BaseTool):
     name = "GET_CREDENTIAL"
-    description = """useful for when you want to retrieve the parameters for a credential.
+    description = """useful for when you want to retrieve the parameters for a credential or stored memory.
     To use the tool you must provide the following parameter "name"
     """
     #return_direct= True
@@ -155,7 +155,7 @@ class CreateCredential(BaseTool):
 
 class RequestCredential(BaseTool):
     name = "REQUEST_CREDENTIAL"
-    description = """useful for when you want to request credential values from the human
+    description = """useful for when you want to request credential or memory values from the human
     To use the tool you must provide the following a list of parameters, where each parameter is a dictionary that may contain the following keys: label, id, placeholder, maxLength, isMultiline, and value.
     """
     #return_direct= True
@@ -206,7 +206,7 @@ class DeleteCredential(BaseTool):
 
 class UpdateCredential(BaseTool):
     name = "UPDATE_CREDENTIAL"
-    description = """useful for when you want to update an existing credential.
+    description = """useful for when you want to update an existing credential or memory.
     To use the tool you must provide the following parameter "name", "parameters_value_pairs"
     parameters_value_pairs should be json string of parameters and values
     """

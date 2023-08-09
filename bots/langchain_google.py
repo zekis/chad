@@ -9,6 +9,7 @@ import re
 import pika
 import faiss
 import urllib
+from urllib.parse import quote
 
 from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
@@ -50,11 +51,11 @@ from langchain.document_loaders import WebBaseLoader
 load_dotenv(find_dotenv())
 
 
-class WebBot(BaseTool):
-    name = "BROWSE"
-    description = """useful for when you want to browse the internet.
-    Specify the website you want to browse and the information you are after.
-    Input should be a json string with two keys: 'website', 'query'
+class GoogleBot(BaseTool):
+    name = "GOOGLE"
+    description = """useful for when you want to search the internet.
+    Specify search website url and the query.
+    Input should be a json string with two keys: search_engine_url, query
     Do not use escape characters.
     Be careful to always use single quotes for strings in the json string
     """
@@ -70,6 +71,8 @@ class WebBot(BaseTool):
             
             #URL = urllib.parse.quote(website)
             print(f"{website} -> {query}")
+            url_encoded_s = quote(query)
+
             llm = ChatOpenAI(temperature=0)
            
             
@@ -80,7 +83,7 @@ class WebBot(BaseTool):
             #     length_function = len,
             # )
             hwebsite = ensure_http_or_https(website)
-            loader = WebBaseLoader(hwebsite + "")
+            loader = WebBaseLoader(hwebsite + "/search?q=" + query)
             documents = loader.load()
 
             text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -104,7 +107,7 @@ class WebBot(BaseTool):
             
         except Exception as e:
             traceback.print_exc()
-            return f"""The Input should be a json string with two keys: "website", "query".
+            return f"""The Input should be a json string with two keys: "search_engine_url", "query".
             Or there was a problem with the request. {str(e)}"""
         
 

@@ -182,10 +182,10 @@ class TeamsConversationBot(TeamsActivityHandler):
         tenant_id = conversation_reference.conversation.tenant_id
         email_address = member.email
 
-        print(f"Message - User ID: {user_id}, TenantID: {tenant_id}")
+        #print(f"Message - User ID: {user_id}, TenantID: {tenant_id}")
         
         if value:
-            print(f"Got Activity: {turn_context.activity}")
+            #print(f"Got Activity: {turn_context.activity}")
             # Get the input value. This will be in turn_context.activity.value['acDecision'].
             selected_value = turn_context.activity.value.get('acDecision', None)
             suggestions_value = turn_context.activity.value.get('suggestions', None)
@@ -242,7 +242,13 @@ class TeamsConversationBot(TeamsActivityHandler):
                 
             else:
                 message = random.choice(thinking_messages)
+                
+                #this will check the bot is running and start it if its not
+                self.bot_manager.handle_command("quiet_start",  user_id, tenant_id, user_name, email_address)
                 publish(message, user_id)
+
+
+                
                 #response = self.message_channel.queue_declare('message', passive=True)
                 # if response.method.message_count > 0:
                 #     self.publish(f"Im already working on {response.method.message_count} messages")
@@ -250,7 +256,7 @@ class TeamsConversationBot(TeamsActivityHandler):
                 #self.notify_channel.basic_publish(exchange='',routing_key='notify',body=message)
                 #self.message_channel.basic_publish(exchange='',routing_key='message',body=text)
                 send_to_bot(user_id, text)
-                print(text)
+                #print(text)
 
                 return await turn_context.send_activities([
                         Activity(
@@ -276,7 +282,7 @@ class TeamsConversationBot(TeamsActivityHandler):
         if body:
             
             #user_id, type, body, data = decode_message(body)
-            print(f"SERVER: user_id: {user_id}, type: {type}, body: {body}")
+            #print(f"SERVER: user_id: {user_id}, type: {type}, body: {body}")
 
             conversation_reference = self.conversation_references.get(user_id, None)
             if conversation_reference is None:
@@ -294,7 +300,7 @@ class TeamsConversationBot(TeamsActivityHandler):
                         lambda turn_context: turn_context.send_activity(MessageFactory.text(body)),
                         self._app_id,
                     )
-                    print(decoded_body)
+                    #print(decoded_body)
                 
             elif type == "action":
                 #actions = message_dict.get('actions')
@@ -315,7 +321,8 @@ class TeamsConversationBot(TeamsActivityHandler):
                 #actions = message_dict.get('actions')
                 if data:
                     card_data = json.loads(data)
-                    print(f"CARD: {card_data}")
+                    #print(f"CARD: {card_data}")
+                    
                     message = Activity(
                         type=ActivityTypes.message,
                         attachments=[CardFactory.adaptive_card(card_data)]
