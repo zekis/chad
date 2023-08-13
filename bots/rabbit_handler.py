@@ -1,4 +1,5 @@
 import traceback
+import config
 
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.chat_models import ChatOpenAI
@@ -15,7 +16,9 @@ import traceback
 #import config
 #from bots.utils import encode_message, decode_message
 from common.rabbit_comms import publish, publish_action, consume, publish_actions
-from bots.langchain_assistant import generate_commands
+#from bots.langchain_assistant import generate_commands
+
+
 class RabbitHandler(BaseCallbackHandler):
 
     #message_channel = pika.BlockingConnection()
@@ -68,17 +71,17 @@ class RabbitHandler(BaseCallbackHandler):
     #     #table = generate_table(output)
     #     #publish(f"{table}")
 
-    def on_tool_error(
-        self,
-        error: Union[Exception, KeyboardInterrupt],
-        *,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Run when tool errors."""
-        print(error)
-        return str(error)
+    # def on_tool_error(
+    #     self,
+    #     error: Union[Exception, KeyboardInterrupt],
+    #     *,
+    #     run_id: UUID,
+    #     parent_run_id: Optional[UUID] = None,
+    #     **kwargs: Any,
+    # ) -> Any:
+    #     """Run when tool errors."""
+    #     print("tool_error: " + str(error))
+        
 
     def on_agent_finish(
         self,
@@ -126,30 +129,31 @@ class RabbitHandler(BaseCallbackHandler):
                     # Extract text part without JSON string
                     text_without_json = text_content.split('```')[0].strip()
                     text_without_prefixes = text_without_json.replace('Thought: ','').replace('Action:', '').replace('\n','')
-                    
-                    publish(f"{text_without_prefixes}")
+                    if config.VERBOSE:
+                        """Turn off"""
+                        #publish(f"VERBOSE: {text_without_prefixes}")
                 
                 if output_content:
-                    #publish(f"{output_content}")
-                    buttons = [("Creating an Email", f"Create an email with the following: {output_content}"),("Creating a Task", f"Create a task with the following: {output_content}"),("Creating a Meeting", f"Create a meeting to discuss the following: {output_content}")]
+                    publish(f"{output_content}")
+                    #buttons = [("Creating an Email", f"Create an email with the following: {output_content}"),("Creating a Task", f"Create a task with the following: {output_content}"),("Creating a Meeting", f"Create a meeting to discuss the following: {output_content}")]
                     #buttons = generate_commands(output_content)
-                    feedback = f"""{output_content}. Is there anything else I can do?"""
+                    #feedback = f"""{output_content}. Is there anything else I can do?"""
                     #publish_actions(feedback, buttons)
         except Exception as e:
             traceback.print_exc()
             #return e
 
-    # def on_chain_error(
-    #     self,
-    #     error: Union[Exception, KeyboardInterrupt],
-    #     *,
-    #     run_id: UUID,
-    #     parent_run_id: Optional[UUID] = None,
-    #     **kwargs: Any,
-    # ) -> Any:
-    #     """Run when chain errors."""
-    #     if error:
-    #         #message = encode_message(config.USER_ID,'prompt', message)
-    #         #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
-    #         print(f"Chain Error: {error}")
-    #         return str(error)
+    def on_chain_error(
+        self,
+        error: Union[Exception, KeyboardInterrupt],
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Run when chain errors."""
+        if error:
+            #message = encode_message(config.USER_ID,'prompt', message)
+            #self.message_channel.basic_publish(exchange='',routing_key='notify',body=message)
+            print(f"Chain Error: {error}")
+            return str(error)

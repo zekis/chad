@@ -1,6 +1,6 @@
 import traceback
-
 import config
+
 from dotenv import find_dotenv, load_dotenv
 #from flask import request
 import json
@@ -9,6 +9,7 @@ import re
 import pika
 import faiss
 import urllib
+from urllib.parse import quote
 
 from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
@@ -18,8 +19,9 @@ from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSS
 from bots.rabbit_handler import RabbitHandler
 #from bots.utils import encode_message, decode_message, generate_response, validate_response, parse_input, sanitize_string
 from common.rabbit_comms import publish, publish_list, publish_draft_card, publish_draft_forward_card
+from common.utils import tool_description, tool_error
 #from common.utils import generate_response, generate_whatif_response, generate_plan_response
-from bots.langchain_assistant import generate_response
+#from bots.langchain_assistant import generate_response
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
 from langchain.tools import StructuredTool
@@ -47,29 +49,26 @@ from langchain.document_loaders import WebBaseLoader
 
 
 
-load_dotenv(find_dotenv())
+class GoogleBot(BaseTool):
+    parameters = []
+    optional_parameters = []
+    name = "GOOGLE"
+    summary = """useful for when you want to search the internet using google. """
+    parameters.append({"name": "query", "description": "search query" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
-
-class WebBot(BaseTool):
-    name = "BROWSE"
-    description = """useful for when you want to browse the internet.
-    Specify the website you want to browse and the information you are after.
-    Input should be a json string with two keys: 'website', 'query'
-    Do not use escape characters.
-    Be careful to always use single quotes for strings in the json string
-    """
-    return_direct= False
-
-    def _run(self, website: str = None, query: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    def _run(self, query: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            
+            website = "https://www.google.com.au"
             # if text:
             #     #question = text.get("question")
             #     website = text.get("website")
             
             #URL = urllib.parse.quote(website)
             print(f"{website} -> {query}")
+            url_encoded_s = quote(query)
+
             llm = ChatOpenAI(temperature=0)
            
             
@@ -80,7 +79,7 @@ class WebBot(BaseTool):
             #     length_function = len,
             # )
             hwebsite = ensure_http_or_https(website)
-            loader = WebBaseLoader(hwebsite + "")
+            loader = WebBaseLoader(hwebsite + "/search?q=" + query)
             documents = loader.load()
 
             text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -99,13 +98,15 @@ class WebBot(BaseTool):
             #publish(response)
             response = web_db.similarity_search(query)
 
-            
-            return response[0].page_content
+            if publish.lower() == "true":
+                publish(response[0].page_content)
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return response[0].page_content
             
         except Exception as e:
             traceback.print_exc()
-            return f"""The Input should be a json string with two keys: "website", "query".
-            Or there was a problem with the request. {str(e)}"""
+            return tool_error(e, self.description)
         
 
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:

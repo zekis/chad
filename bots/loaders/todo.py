@@ -1,30 +1,19 @@
 import traceback
 import config
-from dotenv import find_dotenv, load_dotenv
-#from flask import request
-import json
-import os
-import re
-import pika
 
-from pydantic import BaseModel, Field
-from datetime import datetime, date, time, timezone, timedelta
+from datetime import datetime, timedelta
 from dateutil import parser
 from typing import Any, Dict, Optional, Type
-from bots.langchain_assistant import generate_response
+
 from common.rabbit_comms import publish_todo_card, publish_list, publish_folder_list
-#from common.rabbit_comms import publish, publish_card, publish_list
-#from common.utils import encode_message, decode_message
+from common.utils import tool_description, tool_error
 from common.utils import validate_response, parse_input, sanitize_subject
-#from common.utils import generate_response, generate_whatif_response, generate_plan_response
-from O365 import Account, FileSystemTokenBackend, MSGraphProtocol
+
+from O365 import Account
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
-from langchain.tools import StructuredTool
 
-
-### With your own identity (auth_flow_type=='credentials') ####
 def authenticate():
     credentials = (config.APP_ID, config.APP_PASSWORD)
     account = Account(credentials,auth_flow_type='credentials',tenant_id=config.TENANT_ID, main_resource=config.OFFICE_USER)
@@ -85,39 +74,6 @@ def get_task_detail_by_id(folder_name, task_id):
         traceback.print_exc()
         return repr(e)
 
-# def build_task_sumary(task):
-#     body = f"""
-#         subject = {task.subject}
-#         created = {task.created}
-#         modified = {task.modified}
-#         importance = {task.importance}
-#         is_starred = {task.is_starred}
-#         due = {task.due}
-#         completed = {task.completed}
-#         description = {task.body}
-#     """
-#     return body
-
-# def tasks_to_string(task_list, folder):
-# #list current tasks
-#     if task_list:
-#         task_str = "### Folder: " + str(folder)
-#         for task in task_list:
-#             #print(str(folder) + " " + str(task))
-#             if not task.is_completed:
-#                 task_str = task_str + "\n - " + str(task.subject) + " Due: " + str(task.due)
-#         return task_str
-#     else:
-#         return "You must specify a valid folder name, use get_task_folders to get the list of folders"
-
-# def folders_to_string(folders_list):
-# #list current tasks
-#     folders_str = "### Folders:"
-#     for folder in folders_list:
-#         print(folder)
-#         folders_str = folders_str + "\n - " + str(folder)
-#     return folders_str
-
 def scheduler_get_task_due_today(folder):
     account = authenticate()
     todo =  account.tasks()
@@ -157,22 +113,16 @@ def scheduler_get_bots_unscheduled_task(folder):
             return task
     return None
 
-# class MSTodoToolSchema(BaseModel):
-#     #command: str = Field(description="should be one of the following commands, get_tasks, get_single_task, get_groups, get_single_group")
-#     folder_name: str = Field(..., description="should be task folder name")
-#     task_name: str = Field(..., description="should be a task name")
-
 class MSGetTasks(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "GET_TASKS"
-    description = """useful for when you need to get a list of tasks in a task folder.
-    To use the tool you must provide the following parameter "folder_name" 
-    If folder not specified, default will be used.
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, folder_name: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    summary = """useful for when you need to get a list of tasks in a task folder. """
+    parameters.append({"name": "folder_name", "description": "If folder not specified, default will be used" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, folder_name: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             # print(text)
             # data = parse_input(text)
@@ -195,41 +145,46 @@ class MSGetTasks(BaseTool):
 
             if tasks:
                 for task in tasks:
-                    #ai_summary = ai_summary + " - Subject: " + task.subject + ", Due " + task.due.strftime("%A, %B %d, %Y at %I:%M %p") + "\n"
+                    
                     if task.due:
                         due_date = task.due.strftime("%A, %B %d, %Y at %I:%M %p")
                     else:
                         due_date = "No due date"
+                    ai_summary = ai_summary + " - Subject: " + task.subject + ", Due " + due_date + "\n"
                     title = task.subject + " - " + due_date
                     print(title)
                     value = "Please use the GET_TASK_DETAIL tool using folder_name: " + folder_name + " and task_id: " + task.task_id
                     human_summary.append((title, value))
                 
-                title_message = f"Open Tasks in Folder: {folder.name}"
-                publish_list(title_message, human_summary)
-                #notify_channel.basic_publish(exchange='',routing_key='notify',body=human_summary)
-            else:
-                return "No events"
+                if publish.lower() == "true":
+                    title_message = f"Open Tasks in Folder: {folder.name}"
+                    publish_list(title_message, human_summary)
+                    return config.PROMPT_PUBLISH_TRUE
+                else:
+                    return ai_summary
+                
             
-            #return ai_summary
-            #return generate_response(ai_summary)
+            raise Exception(f"Could not find tasks in folder {folder_name}")
+
         except Exception as e:
             traceback.print_exc()
-            return f"You must specify a valid folder name, use get_task_folders to get the list of folders ({e})"
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSGetTasks does not support async")
+        raise NotImplementedError("GET_TASKS does not support async")
 
 class MSGetTaskDetail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "GET_TASK_DETAIL"
-    description = """useful for when you need more information about a task.
-    To use the tool you must provide the following parameters "folder_name" and "task_id".
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[BaseModel] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, folder_name: str, task_id: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    summary = """useful for when you need more information about a task. """
+    parameters.append({"name": "folder_name", "description": "task folder name" })
+    parameters.append({"name": "task_id", "description": "task id" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, folder_name: str, task_id: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             # print(text)
@@ -247,47 +202,42 @@ class MSGetTaskDetail(BaseTool):
                     due_date = task.due.strftime("%A, %B %d, %Y at %I:%M %p")
                 else:
                     due_date = "No due date"
-                # ai_summary =  f"""{ai_summary} - Task: {task.subject},
-                # Created: {task.start.strftime("%A, %B %d, %Y at %I:%M %p")},
-                # Modified: {task.modified.strftime("%A, %B %d, %Y at %I:%M %p")},
-                # Importance: {task.importance},
-                # Is starred: {task.is_starred},
-                # Due: {due_date},
-                # Completed: {task.completed},
-                # Description: {task.description},
-                # """
-                message = task.subject
-                publish_todo_card(message, task)
-                #return ai_summary
+                
+                ai_summary =  f"""{ai_summary} - Task: {task.subject},
+                # importance: {task.importance},
+                # is_starred: {task.is_starred},
+                # due: {due_date},
+                # completed: {task.completed}"""
 
-            #print(f"folder_name: {data["folder_name"]}, task_name: {data["task_name"]}") 
-                return "Done"
-            else:
-                return "No task found"
+                if publish.lower() == "true":
+                    message = task.subject
+                    publish_todo_card(message, task)
+                    return config.PROMPT_PUBLISH_TRUE
+                else:
+                    return ai_summary
+            
+            raise Exception(f"Could not find task {task_id} in folder {folder_name}")
             
         except Exception as e:
             traceback.print_exc()
-            return "Could not retrieve task. You must specify a valid task ID"
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSGetTaskDetail does not support async")
+        raise NotImplementedError("GET_TASK_DETAIL does not support async")
 
 class MSGetTaskFolders(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "GET_TASK_FOLDERS"
-    description = """useful for when you need a list of existing task folders.
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
-        #print(f"query: {query}")
+    summary = """Useful for when you need a list of existing task folders. """
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
 
         ai_summary = ""
         human_summary = []
-
-        
 
         folders = get_folders()
         if folders:
@@ -298,27 +248,30 @@ class MSGetTaskFolders(BaseTool):
                 value = "Please use the GET_TASKS tool using folder name: " + str(folder_clean)
                 human_summary.append((title, value))
             
-            title_message = f"Task Folders"
-            publish_folder_list(title_message, human_summary)
-            #return ai_summary
-            return "Done"
+            
+            if publish == "True":
+                title_message = f"Task Folders"
+                publish_folder_list(title_message, human_summary)
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return ai_summary
         else:
-            return "No Task Folders"
+            raise Exception(f"Could not find any task folders")
     
     async def _arun(self, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSGetTaskFolders does not support async")
+        raise NotImplementedError("GET_TASK_FOLDERS does not support async")
 
 class MSCreateTaskFolder(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "CREATE_TASK_FOLDER"
-    description = """useful for when you need to create a new folder to contain tasks.
-    To use the tool you must provide the following parameter "folder_name"
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, folder_name: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    summary = """Useful for when you need to create a new folder to contain tasks. """
+    parameters.append({"name": "folder_name", "description": "folder name" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, folder_name: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             # print(text)
             # data = parse_input(text)
@@ -329,81 +282,72 @@ class MSCreateTaskFolder(BaseTool):
             todo =  account.tasks()
             new_folder = todo.new_folder(folder_name)
             
-            #print(f"folder_name: {data["folder_name"]}") 
-            return "Task Folder Created"
+            if publish.lower() == "true":
+                publish(f"Task Folder {folder_name} Created")
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return f"Task Folder {folder_name} Created"
+
         except Exception as e:
-            return repr(e)
+            traceback.print_exc()
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSGetTasks does not support async")
+        raise NotImplementedError("CREATE_TASK_FOLDER does not support async")
 
 class MSSetTaskComplete(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "SET_TASK_COMPLETE"
-    description = """
-    Useful for when you need to mark a task as complete
-    To use the tool you must provide the following parameters "task_id.
-    Input should be a json string with two keys: "folder_name" and "task_name"
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, task_id: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    summary = """Useful for when you need to mark a task as complete """
+    parameters.append({"name": "task_id", "description": "task id" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, task_id: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            # print(text)
-            # data = parse_input(text)
-            # folder_name = data.get("folder_name")
-            # folder_name = sanitize_subject(folder_name)
-            # task_name = data.get("task_name")
-            # task_name = sanitize_subject(task_name)
             
             account = authenticate()
             todo = account.tasks()
 
-            # #get the folder and task
-            # folder = todo.get_folder(folder_name=folder_name)
-            # query = todo.new_query("title").equals(task_name)
             todo_task = todo.get_task(task_id)
             
             if todo_task:
                 todo_task.mark_completed()
                 todo_task.save()
-                publish_todo_card("Task Complete", todo_task)
-                #return "Task Marked as Complete"
-                return "Done"
+
+                if publish.lower() == "true":
+                    publish_todo_card("Task Complete", todo_task)
+                    return config.PROMPT_PUBLISH_TRUE
+                else:
+                    return f"Task {task_id} marked complete"
             else:
-                return "could not find task"
+                raise Exception(f"Could not find task {task_id}")
             
         except Exception as e:
-            return repr(e)
+            traceback.print_exc()
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSSetTaskComplete does not support async")
+        raise NotImplementedError("SET_TASK_COMPLETE does not support async")
 
 class MSCreateTask(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "CREATE_TASK"
-    description = """
-    Useful for when you need to create a task.
-    To use the tool you must provide the following parameters "folder_name", "task_name", "due_date", "reminder_date", "body".
-    If not sure what folder to create the task in, use the default folder name 'Tasks' or use the GET_TASK_FOLDERS tool.
-    due_date should be in the format "2023-02-28" for a python datetime.date object
-    reminder_date should be in the format "2023-02-28" for a python datetime.date object
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, task_name: str, folder_name: str = None, due_date: str = None, reminder_date: str = None, body: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    summary = """Useful for when you need to create a task. """
+    parameters.append({"name": "folder_name", "description": "task folder name" })
+    parameters.append({"name": "task_name", "description": "task subject" })
+    optional_parameters.append({"name": "due_date", "description": "due_date should be in the format 2023-02-28 for a python datetime.date object" })
+    optional_parameters.append({"name": "reminder_date", "description": "due_date should be in the format 2023-02-26 for a python datetime.date object" })
+    optional_parameters.append({"name": "body", "description": "task body content" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, task_name: str, folder_name: str = None, due_date: str = None, reminder_date: str = None, body: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            # print(text)
-            # data = parse_input(text)
-            # folder_name = data.get("folder_name")
-            # folder_name = sanitize_subject(folder_name)
-            # task_name = data.get("task_name")
-            # task_name = sanitize_subject(task_name)
-            # due_date = data.get("due_date")
-            # reminder_date = data.get("reminder_date")
-            # body = data.get("body")
             
             account = authenticate()
             todo = account.tasks()
@@ -424,88 +368,66 @@ class MSCreateTask(BaseTool):
                 new_task.save()
 
                 #ai_summary = get_task_detail(folder_name, task_name)
-                
-                publish_todo_card(task_name, new_task) 
-                #return new_task.task_id
-                return "Done"
+                if publish.lower() == "true":
+                    publish_todo_card(task_name, new_task) 
+                    return config.PROMPT_PUBLISH_TRUE
+                else:
+                    return f"Task {task_name} created"
             else:
-                return "Could not create task. You must specify a valid folder name, use get_task_folders to get the list of folders"
+                raise Exception(f"Could not find folder {folder_name}")
 
         except Exception as e:
             traceback.print_exc()
-            #most likely error
-            return f"Could not create task. {e}"
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSCreateTask does not support async")
+        raise NotImplementedError("CREATE_TASK does not support async")
 
 class MSDeleteTask(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "DELETE_TASK"
-    description = """
-    Useful for when you need to delete a task.
-    To use the tool you must provide the following parameters "task_id"
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, task_id, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    summary = """Useful for when you need to delete a task. """
+    parameters.append({"name": "task_id", "description": "task id" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, task_id, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            # print(text)
-            # data = parse_input(text)
-            # folder_name = data.get("folder_name")
-            # folder_name = sanitize_subject(folder_name)
-            # task_name = data.get("task_name")
-            # task_name = sanitize_subject(task_name)
-
-            # account = authenticate()
-            # todo = account.tasks()
-
-            # #get the folder and task
-            # folder = todo.get_folder(folder_name=folder_name)
-            # query = todo.new_query("title").equals(task_name)
+            
             todo_task = todo.get_task(task_id)
             
             todo_task.delete()
-            publish_todo_card("Task Deleted", todo_task)
 
-            #return "Task Deleted"
-            return "Done"
+            if publish.lower() == "true":
+                publish(f"Task Deleted")
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return f"Task {task_id} deleted"
         except Exception as e:
-            return "Could not delete task. You must specify a valid task ID, use get_task_folders and get_tasks to get the list of folders and tasks"
-    
+            traceback.print_exc()
+            return tool_error(e, self.description)
+
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSDeleteTask does not support async")
+        raise NotImplementedError("DELETE_TASK does not support async")
 
 class MSUpdateTask(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "UPDATE_TASK"
-    description = """
-    Useful for when you need to update a task.
-    To use the tool you must provide the following parameters "task_id", "task_name", "due_date", "reminder_date", "body".
-    If not sure what folder the is in, use the get_task_folders tool.
-    due_date should be in the format "2023-02-28" for a python datetime.date object
-    reminder_date should be in the format "2023-02-28" for a python datetime.date object
-    Be careful to always use double quotes for strings in the json string
-    """
-    #args_schema: Type[MSTodoToolSchema] = MSTodoToolSchema
-    return_direct= True
-    def _run(self, task_id: str, task_name: str = None, due_date: str = None, reminder_date: str = None, body: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    summary = """Useful for when you need to update a task. """
+    parameters.append({"name": "task_id", "description": "task id" })
+    optional_parameters.append({"name": "task_name", "description": "task subject" })
+    optional_parameters.append({"name": "due_date", "description": "due_date should be in the format 2023-02-28 for a python datetime.date object" })
+    optional_parameters.append({"name": "reminder_date", "description": "due_date should be in the format 2023-02-26 for a python datetime.date object" })
+    optional_parameters.append({"name": "body", "description": "task body content" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, task_id: str, task_name: str = None, due_date: str = None, reminder_date: str = None, body: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            # print(text)
-            # data = parse_input(text)
-            # # folder_name = data["folder_name"]
-            # # task_name = data["task_name"]
-
-            # folder_name = data.get("folder_name")
-            # folder_name = sanitize_subject(folder_name)
-
-            # task_name = data.get("task_name")
-            # task_name = sanitize_subject(task_name)
-            
-            # due_date = data.get("due_date")
-            # reminder_date = data.get("reminder_date")
-            # body = data.get("body")
 
             account = authenticate()
             todo = account.tasks()
@@ -526,18 +448,20 @@ class MSUpdateTask(BaseTool):
                     #date_format = '%Y-%m-%d'
                     existing_task.reminder_date = parser.parse(due_date)
                 existing_task.save()
-                publish_todo_card("Task Updated", existing_task)
-                #return "Task Updated"
-                return "Done"
+
+                if publish.lower() == "true":
+                    publish_todo_card("Task Updated", existing_task)
+                    return config.PROMPT_PUBLISH_TRUE
+                else:
+                    return f"Task {task_id} updated"
             else:
-                return "Could not update task. You must specify a valid task id and folder name, use get_task_folders and get_tasks to get the list of folders and tasks"
+                raise Exception(f"Could not find task {task_id}")
 
         except Exception as e:
             traceback.print_exc()
-            #most likely error
-            return "Could not update task. You must specify a valid task name and folder name, use get_task_folders and get_tasks to get the list of folders and tasks"
-    
+            return tool_error(e, self.description)
+
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("MSDeleteTask does not support async")
+        raise NotImplementedError("UPDATE_TASK does not support async")
 

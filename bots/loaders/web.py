@@ -1,67 +1,34 @@
 import traceback
-
 import config
-from dotenv import find_dotenv, load_dotenv
-#from flask import request
-import json
-import os
-import re
-import pika
-import faiss
-import urllib
-from urllib.parse import quote
 
-from pydantic import BaseModel, Field
-from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 
-from bots.loaders.todo import MSGetTasks, MSGetTaskFolders, MSGetTaskDetail, MSSetTaskComplete, MSCreateTask, MSDeleteTask, MSCreateTaskFolder
-from bots.rabbit_handler import RabbitHandler
-#from bots.utils import encode_message, decode_message, generate_response, validate_response, parse_input, sanitize_string
 from common.rabbit_comms import publish, publish_list, publish_draft_card, publish_draft_forward_card
-#from common.utils import generate_response, generate_whatif_response, generate_plan_response
-from bots.langchain_assistant import generate_response
+from common.utils import tool_description, tool_error
+
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
-from langchain.tools import StructuredTool
 
-#from langchain import OpenAI
 from langchain.chat_models import ChatOpenAI
-from langchain.agents import AgentType
-
-from langchain.vectorstores import FAISS
-from langchain.docstore import InMemoryDocstore
-from langchain.agents import ZeroShotAgent, AgentExecutor
-from langchain.memory import ConversationBufferMemory
-from langchain import LLMChain, PromptTemplate
-from langchain.agents import load_tools, Tool
-from langchain.utilities import SerpAPIWrapper
-from langchain.agents import initialize_agent, AgentType
 
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
-from langchain.chains import RetrievalQAWithSourcesChain
-from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
-from langchain.llms import OpenAI
-from langchain.chains import RetrievalQA
+
+from langchain.text_splitter import CharacterTextSplitter
 from langchain.document_loaders import WebBaseLoader
 
 
+class WebBot(BaseTool):
+    parameters = []
+    optional_parameters = []
+    name = "BROWSE"
+    summary = "useful for when you want to scrape a website for information after using the GOOGLE tool to find a url"
+    parameters.append({"name": "website", "description": "valid url" })
+    parameters.append({"name": "query", "description": "search query to filter the scraped data" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
-load_dotenv(find_dotenv())
-
-
-class GoogleBot(BaseTool):
-    name = "GOOGLE"
-    description = """useful for when you want to search the internet.
-    Specify search website url and the query.
-    Input should be a json string with two keys: search_engine_url, query
-    Do not use escape characters.
-    Be careful to always use single quotes for strings in the json string
-    """
-    return_direct= False
-
-    def _run(self, website: str = None, query: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, website: str = None, query: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             
@@ -71,8 +38,6 @@ class GoogleBot(BaseTool):
             
             #URL = urllib.parse.quote(website)
             print(f"{website} -> {query}")
-            url_encoded_s = quote(query)
-
             llm = ChatOpenAI(temperature=0)
            
             
@@ -83,7 +48,7 @@ class GoogleBot(BaseTool):
             #     length_function = len,
             # )
             hwebsite = ensure_http_or_https(website)
-            loader = WebBaseLoader(hwebsite + "/search?q=" + query)
+            loader = WebBaseLoader(hwebsite + "")
             documents = loader.load()
 
             text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -102,13 +67,15 @@ class GoogleBot(BaseTool):
             #publish(response)
             response = web_db.similarity_search(query)
 
-            
-            return response[0].page_content
+            if publish.lower() == "true":
+                publish(response[0].page_content)
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return response[0].page_content
             
         except Exception as e:
             traceback.print_exc()
-            return f"""The Input should be a json string with two keys: "search_engine_url", "query".
-            Or there was a problem with the request. {str(e)}"""
+            return tool_error(e, self.description)
         
 
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:

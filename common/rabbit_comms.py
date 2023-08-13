@@ -2,6 +2,7 @@ import traceback
 import config
 import pika
 import json
+import time 
 
 from common.card_factories import (
     create_draft_email_card, 
@@ -305,3 +306,24 @@ def receive_from_bot():
         return user_id, type, body, data
     else:
         return None, None,None, None
+
+#callbacks
+def get_input(timeout_minutes=1):
+    timeout = time.time() + 60*timeout_minutes   # 5 minutes from now
+    #print("Insert your text. Press Ctrl-D (or Ctrl-Z on Windows) to end.")
+    #contents = []
+    while True:
+        msg = consume()
+        if msg and msg != "":
+            question = msg
+            break
+        if timeout_minutes != 0:
+            if time.time() > timeout:
+                question = "break"
+                break
+        time.sleep(0.5)
+        #await asyncio.sleep(0.5)
+    return question
+
+def send_prompt(query):
+        publish(query + "?")

@@ -185,10 +185,11 @@ class TeamsConversationBot(TeamsActivityHandler):
         #print(f"Message - User ID: {user_id}, TenantID: {tenant_id}")
         
         if value:
-            #print(f"Got Activity: {turn_context.activity}")
+            print(f"Got Activity: {turn_context.activity}")
             # Get the input value. This will be in turn_context.activity.value['acDecision'].
             selected_value = turn_context.activity.value.get('acDecision', None)
             suggestions_value = turn_context.activity.value.get('suggestions', None)
+            config_value = turn_context.activity.value.get('config_value', None)
             create_tts = turn_context.activity.value.get('create_tts', None)
             # You can then use the selected value to trigger the imBack event.
             if selected_value:
@@ -204,9 +205,18 @@ class TeamsConversationBot(TeamsActivityHandler):
                     send_to_bot(user_id, feedback)
 
                 return await turn_context.send_activities([
-                        Activity(
-                            type=ActivityTypes.typing
-                        )])
+                            Activity(
+                                type=ActivityTypes.typing
+                            )])
+            
+            if config_value:
+                feedback = f"{config_value}"
+                send_to_bot(user_id, feedback)
+
+                return await turn_context.send_activities([
+                            Activity(
+                                type=ActivityTypes.typing
+                            )])
             if create_tts:
                 reply = Activity(type=ActivityTypes.message)
                 reply.text = "This is an internet attachment."
@@ -239,6 +249,9 @@ class TeamsConversationBot(TeamsActivityHandler):
 
             elif text.lower() == "stop_bots":
                 self.bot_manager.handle_command("stop_bots", user_id)
+
+            elif text.lower() == "config":
+                self.bot_manager.handle_command("config", user_id, tenant_id, user_name, email_address)
                 
             else:
                 message = random.choice(thinking_messages)
@@ -282,7 +295,7 @@ class TeamsConversationBot(TeamsActivityHandler):
         if body:
             
             #user_id, type, body, data = decode_message(body)
-            #print(f"SERVER: user_id: {user_id}, type: {type}, body: {body}")
+            print(f"SERVER: user_id: {user_id}, type: {type}, body: {body}")
 
             conversation_reference = self.conversation_references.get(user_id, None)
             if conversation_reference is None:

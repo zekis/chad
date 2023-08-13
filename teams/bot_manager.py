@@ -48,7 +48,7 @@ class BotManager:
                 #stop the bot
                 """restart the bot"""
                 clear_queue(user_id)
-                publish(f"Restarting bot.", user_id)
+                publish(f"Restarting bot for {user_name}.{user_id}", user_id)
                 if user_id in self.user_processes:
                     self.user_processes[user_id].terminate()
                     self.user_processes[user_id].wait()
@@ -56,6 +56,21 @@ class BotManager:
                 process = subprocess.Popen(['python', 'ai.py', user_id, tenant_id, user_name, email_address])
                 self.user_processes[user_id] = process
                 publish(f"Bot restarted.", user_id)
+            
+
+            elif command.lower() == "config":
+                #stop the bot
+                """restart the bot"""
+                clear_queue(user_id)
+                publish(f"Entering config mode for {user_name}.{user_id}", user_id)
+                if user_id in self.user_processes:
+                    self.user_processes[user_id].terminate()
+                    self.user_processes[user_id].wait()
+                    del self.user_processes[user_id]
+                process = subprocess.Popen(['python', 'ai.py', user_id, tenant_id, user_name, email_address, '--reset_config'])
+                self.user_processes[user_id] = process
+                #publish(f"Bot restarted.", user_id)
+
             elif command.lower() == "list_bots":
                 for process in self.user_processes:
                     publish(f"Instances: {process} for {user_id}", user_id)

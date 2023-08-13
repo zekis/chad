@@ -1,7 +1,7 @@
 import traceback
-
 import config
-from dotenv import find_dotenv, load_dotenv
+
+
 #from flask import request
 import json
 import os
@@ -14,7 +14,9 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Any, Dict, Optional, Type
 from bots.rabbit_handler import RabbitHandler
-from common.rabbit_comms import publish_actions, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card, send_to_bot
+from common.rabbit_comms import consume, publish, publish_action, publish_actions, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card, send_to_bot
+from common.utils import tool_description, tool_error
+
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain import ConversationChain, LLMChain, PromptTemplate
 from langchain.chat_models import ChatOpenAI
@@ -25,20 +27,50 @@ from langchain.tools import BaseTool
 
 
 class PlannerBot(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "PLANNER"
-    description = """useful for when you need to breakdown objectives into a list of tasks. 
-    Input: an objective to create a todo list for. 
-    Output: a todo list for that objective. 
-    Please be very clear what the objective is!
-    """
-    return_direct= True
-    tools = []
+    summary = """useful for when you need to breakdown objectives into a list of tasks. """
+    parameters.append({"name": "text", "description": "task or objective to create a plan for" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
+    tools = []
     def init(self, tools):
         self.tools = tools
     
+    #callbacks
+    def get_plan_input(self, question):
+        timeout = time.time() + 60*5   # 1 minutes from now
+        #Calculate plan
+        plan = self.model_response(question, tools)
+        #publish(plan)
+        publish_action(plan,"continue","pass")
+        publish("Would you like to make any changes to the plan above?")
+        #loop until human happy with plan
+        #contents = []
+        while True:
+            msg = consume()
+            if msg:
+                question = msg
+                if question.lower() == "continue":
+                    return plan
+                if question.lower() == "pass":
+                    return "stop"
+                if question.lower() == "break":
+                    return "stop"
+                else:
+                    new_prompt = f"Update the following plan: {plan} using the following input: {question}"
+                    plan = self.model_response(new_prompt, tools)
+                    publish_action(plan,"continue","pass")
+                    publish("Would you like to make any changes to the plan above?")
+                    timeout = time.time() + 60*5
+            if time.time() > timeout:
+                return "stop"
+            time.sleep(0.5)
+        return plan
 
-    def _run(self, text: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    def _run(self, text: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Use the tool."""
         try:
             print(text)
@@ -47,11 +79,14 @@ class PlannerBot(BaseTool):
 
             plan = self.model_response(text, self.tools)
             buttons = [("Proceed", "Thinking step by step, action each of the following items in the plan using the tools available plan: "+ plan)]
-            publish_actions(plan,buttons)
-            #send_to_bot(config.USER_ID,plan)
-            return "Done"
+            if publish.lower() == "true":
+                publish_actions(plan,buttons)
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return plan
         except Exception as e:
-            return repr(e)
+            traceback.print_exc()
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
@@ -90,6 +125,6 @@ class PlannerBot(BaseTool):
             return response
         except Exception as e:
             traceback.print_exc()
-            return( f"An exception occurred: {e}")
+            return tool_error(e, self.description)
 
 

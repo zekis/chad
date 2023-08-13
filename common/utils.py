@@ -22,6 +22,8 @@ text_splitter = CharacterTextSplitter(
     length_function = len,
 )
 
+
+
 def validate_response(string):
     text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size=2000, chunk_overlap=0)
     texts = text_splitter.split_text(string)
@@ -127,3 +129,35 @@ def format_documents(documents):
 def format_user_question(question):
     question = re.sub(r'\s+', ' ', question).strip()
     return question
+
+
+def tool_error(error, tool_description):
+    error_message = f"""Error: {error}, Tool Description: {tool_description}"""
+    print(error_message)
+    return error_message
+
+def tool_description(tool_name, tool_summary, tool_parameters = [], tool_optional_parameters = []):
+    tool_instructions = """To use the tool you must provide the following parameters"""
+    str_parameters = ""
+    str_optional_parameters = ""
+
+    for param in tool_parameters:
+        str_param = f"""\n      name: "{param.get('name')}", description: "{param.get('description')}" """
+        str_parameters = str_parameters + str_param
+    
+    for param in tool_optional_parameters:
+        str_param = f"""\n      name: "{param.get('name')}", description: "{param.get('description')}" """
+        str_optional_parameters = str_optional_parameters + str_param
+
+    publish_param = config.PARAMETER_PUBLISH
+    str_publish_param = f"""\n      name: "{publish_param.get('name')}", description: "{publish_param.get('description')}" """
+    str_optional_parameters = str_optional_parameters + str_publish_param
+
+    desc = f"""Tool Name: {tool_name}
+    Summary: {tool_summary}
+    Instructions: {tool_instructions}
+    Parameters: {str_parameters}\n
+    Optional Parameters: {str_optional_parameters}\n
+    Note: Be careful to always use double quotes for strings in the json string """
+    #print(desc)
+    return desc

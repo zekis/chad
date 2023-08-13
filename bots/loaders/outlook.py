@@ -1,15 +1,14 @@
 import traceback
 import config
 
-from datetime import datetime#, date, time, timezone, timedelta
-from dateutil import parser
+from datetime import datetime
 from typing import Any, Dict, Optional, Type
-from bots.langchain_assistant import generate_response
-#from teams.card_factories import create_list_card, create_email_card, create_draft_reply_email_card, create_draft_forward_email_card, create_draft_email_card
+
+
 from common.rabbit_comms import publish, publish_email_card, publish_list, publish_draft_card, publish_draft_forward_card, send_to_bot, publish_event_card
-#from common.utils import generate_response, generate_whatif_response, generate_plan_response
-#from common.utils import validate_response, parse_input, sanitize_string
-from O365 import Account#, FileSystemTokenBackend, MSGraphProtocol
+from common.utils import tool_description, tool_error
+
+from O365 import Account
 
 from langchain.callbacks.manager import AsyncCallbackManagerForToolRun, CallbackManagerForToolRun
 from langchain.tools import BaseTool
@@ -24,7 +23,6 @@ from langchain.schema import (
     SystemMessage
 )
 
-### With your own identity (auth_flow_type=='credentials') ####
 def authenticate():
     credentials = (config.APP_ID, config.APP_PASSWORD)
     account = Account(credentials,auth_flow_type='credentials',tenant_id=config.TENANT_ID, main_resource=config.OFFICE_USER)
@@ -42,7 +40,8 @@ def get_email_summary(email, body_soup):
         Body: {body_soup}"""
 
         print(f"Function Name: get_email_summary | Query: {query}")
-        return chat([HumanMessage(content=query)]).content
+        email_response = chat([HumanMessage(content=query)]).content
+        return email_response
     except Exception as e:
         traceback.print_exc()
         return f'Error getting email summary - Likely exceeded token limit'
@@ -58,8 +57,8 @@ def reply_to_email_summary(summary, comments=None, previous_draft=None):
     if previous_draft:
         query += f"Based on the previous draft: {previous_draft}"
 
-    email_response = chat([HumanMessage(content=query)]).content
     print(f"Function Name: reply_to_email_summary | Query: {query}")
+    email_response = chat([HumanMessage(content=query)]).content
     return email_response
 
 def forward_email_summary(summary, comments=None, previous_draft=None):
@@ -72,8 +71,8 @@ def forward_email_summary(summary, comments=None, previous_draft=None):
     if previous_draft:
         query += f"Based on the previous draft: {previous_draft}"
 
-    email_response = chat([HumanMessage(content=query)]).content
     print(f"Function Name: forward_email_summary | Query: {query}")
+    email_response = chat([HumanMessage(content=query)]).content
     return email_response
 
 def modify_draft(body, comments, previous_draft=None):
@@ -86,8 +85,8 @@ def modify_draft(body, comments, previous_draft=None):
     if previous_draft:
         query += f"Based on the previous draft: {previous_draft}"
 
-    email_response = chat([HumanMessage(content=query)]).content
     print(f"Function Name: modify_draft | Query: {query}")
+    email_response = chat([HumanMessage(content=query)]).content
     return email_response
 
 def get_conversation(ConversationID):
@@ -115,16 +114,6 @@ def get_message(ObjectID):
     returned_email = inbox.get_message(ObjectID)
     return returned_email
 
-# def mark_read(ObjectID):
-#     print(f"Function Name: mark_read | ObjectID: {ObjectID}")
-#     account = authenticate()
-#     mailbox = account.mailbox()
-#     inbox = mailbox.inbox_folder()
-#     # Fetches a single email matching the given `ObjectID` from the inbox and marks it as read.
-#     email = inbox.get_message(ObjectID)
-#     email.mark_as_read()  
-#     return True
-
 def search_emails_return_unique_conv(search_query):
     print(f"Function Name: search_emails_return_unique_conv | Search Query: {search_query}")
     account = authenticate()
@@ -132,8 +121,7 @@ def search_emails_return_unique_conv(search_query):
     inbox = mailbox.inbox_folder()
 
     query = inbox.new_query().search(search_query)
-
-    emails = inbox.get_messages(limit=5, query=query)
+    emails = inbox.get_messages(limit=15, query=query)
 
     count = 0
     if emails:
@@ -147,13 +135,11 @@ def search_emails_return_unique_conv(search_query):
     return None
 
 def search_emails(search_query):
-    #print(f"Function Name: search_emails | Search Query: {search_query}")
     account = authenticate()
     mailbox = account.mailbox()
     inbox = mailbox.inbox_folder()
 
     query = inbox.new_query().search(search_query)
-
     emails = inbox.get_messages(limit=5, query=query)
 
     count = 0
@@ -168,19 +154,16 @@ def create_email_reply(ConversationID, body, save=False):
     inbox = mailbox.inbox_folder()
 
     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
-    
     emails = list(inbox.get_messages(limit=1, query=query))
-    email = emails[0]
 
+    #Get first email
+    email = emails[0]
     email.mark_as_read()
     reply_msg = email.reply()
-
     reply_msg.body = body
 
     if save:
-        #reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
         reply_msg.save_draft()
-
     return reply_msg
 
 def create_email_forward(ConversationID, recipient, body, save=False):
@@ -190,7 +173,6 @@ def create_email_forward(ConversationID, recipient, body, save=False):
     inbox = mailbox.inbox_folder()
 
     query = inbox.new_query().on_attribute('conversationid').equals(ConversationID)
-
     emails = list(inbox.get_messages(limit=1, query=query))
     email = emails[0]
     
@@ -203,7 +185,6 @@ def create_email_forward(ConversationID, recipient, body, save=False):
     reply_msg.body = body
     
     if save:
-        #reply_msg.body += get_signature(config.EMAIL_SIGNATURE_HTML)
         reply_msg.save_draft()
 
     return reply_msg
@@ -229,7 +210,6 @@ def draft_email(recipient, subject, body, user_improvements=None, previous_draft
         message.body = body
 
         if save:
-            #message.body += get_signature(config.EMAIL_SIGNATURE_HTML)
             message.save_draft()
         
         return message
@@ -261,7 +241,23 @@ def clean_html(html):
     return clean_text
 
 def format_email_summary_only(email, summary):
+
+    str_to_address = ""
+    for to_address in email.to:
+        str_to_address = str_to_address + to_address.address + ", "
+
+    str_cc_address = ""
+    for cc_address in email.cc:
+        str_cc_address = str_cc_address + cc_address.address + ", "
+
+    str_bcc_address = ""
+    for bcc_address in email.bcc:
+        str_bcc_address = str_bcc_address + bcc_address.address + ", "
+
     email_s = f"""```
+To: {str_to_address}
+CC: {str_cc_address}
+BCC: {str_bcc_address}
 From: {email.sender.address}
 Subject: {email.subject}
 Date: {email.received.strftime('%Y-%m-%d %H:%M:%S')}
@@ -293,66 +289,60 @@ def scheduler_check_emails():
             else:
                 publish_event_card("New Event", email.get_event())
                 email.mark_as_read()
-            #return ai_summary
     return None
 
 
 class MSSearchEmailsId(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "SEARCH_EMAILS_RETURN_IDS"
-    description = """useful for when you need to search through emails and get their IDs.
-    This tool only returns 5 emails maximum.
-    To use the tool you must provide the following search parameter "query"
-    query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20
-    """
-    return_direct= True
-    def _run(self, query: str, index: int = 1, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    summary = """useful for when you need to search through emails and get their IDs. This tool only returns 15 emails maximum."""
+    parameters.append({"name": "query", "description": "query must use the Keyword Query Language (KQL) syntax. Example query: from:Dan AND received:2023-05-19..2023-05-20"})
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, query: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            print(query)
-            emails = search_emails_return_unique_conv(query)
-            #response = validate_response(emails)
-            ai_summary = "SYSTEM:"
+            ai_summary = ""
             human_summary = []
+
+            emails = search_emails_return_unique_conv(query)
             if emails:
                 for email in emails:
-                    ai_summary = ai_summary + "From: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
-                    #human_summary.append(email['from'] + ": " + email['subject'] + ", EmailID: " + email['object_id'])
+                    ai_summary = ai_summary + " - Email - From: " + email['from'] + ", Subject: " + email['subject'] + ", EmailID: " + email['object_id'] + ", ConversatonID: " + email['conversationid'] + "\n"
                     title = email['from'] + ": " + email['subject']
                     value = "Please use the GET_EMAIL_CHAIN using EmailID: " + email['object_id'] + " and create_task: False"
                     human_summary.append((title, value))
-                #Attempt at sending cards
-                #create_list_card("Choose an option:", [("Option 1", "1"), ("Option 2", "2"), ("Option 3", "3")])
-                
-                publish_list(f"Choose an option:", human_summary)
-                return "Done"
-            else:
-                return "No emails found"
 
-            #return ai_summary
-            #return generate_response(ai_summary)
+                if publish.lower() == "true":
+                    publish_list(f"Choose an option:", human_summary)
+                    return config.PROMPT_PUBLISH_TRUE
+                else:
+                    return ai_summary
+            
+            return "No emails found"
 
         except Exception as e:
             traceback.print_exc()
-            return f'To use the tool you must provide the following search parameter "query" and "index"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("SEARCH_EMAILS does not support async")
+        raise NotImplementedError("SEARCH_EMAILS_RETURN_IDS does not support async")
 
 class MSGetEmailDetail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "GET_EMAIL_CHAIN"
-    description = """useful for when you need to get the email content for a single email or email chain.
-    To use the tool you must provide one of the following parameters "EmailID" or "ConversationID"
-    You can get the Email ID or conversation IDs by using the SEARCH_EMAILS tool
-    Input should be a json string with one key: "ConversationID"
-    Be careful to always use double quotes for strings in the json string
-    Returns email headers and the body. 
-    """
-    return_direct= True
-    def _run(self, EmailID: str = None, ConversationID: str = None, create_task: bool = True, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    summary = """useful for when you need to get the email content for a single email or email chain."""
+    parameters.append({"name": "EmailID", "description": "Retrieve the Email ID by using the SEARCH_EMAILS tool" })
+    parameters.append({"name": "ConversationID", "description": "Retrieve the conversation IDs by using the SEARCH_EMAILS tool" })
+    parameters.append({"name": "follow_up", "description": "The tool will consider if any action is required" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, EmailID: str = None, ConversationID: str = None, follow_up: bool = True, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-           
             if EmailID is not None:
                 #response = get_email(EmailID)
                 email = get_message(EmailID)
@@ -363,19 +353,31 @@ class MSGetEmailDetail(BaseTool):
 
             if email:
                 summary = get_email_summary(email, clean_html(email.body))
-                publish_email_card("Email Review", email, summary)
                 ai_summary = format_email_summary_only(email, summary)
-                #return generate_response(ai_summary)
-                #publish a task question back to itself
-                if create_task:
-                    send_to_bot(config.USER_ID,"Only If the following email requires " + config.FRIENDLY_NAME + " to urgently perform an action such as reply, send a file etc, then use CREATE_TASK tool to create a new task in the Tasks folder. Email: " + ai_summary)
-                return "Done"
-            else:
-                return "No emails"
+
+                task_prompt = f"""First, determine if the following email is directed at {config.FRIENDLY_NAME}.
+                If it is, assess the nature of the query.
+                For common issues, provide basic troubleshooting steps using the REPLY_TO_EMAIL tool.
+                Examples of troubleshooting steps might include checking internet connection, restarting the application, or verifying login credentials.
+                If you, the AI, do not have any suggestions or have already replied with suggestions or if the request requires specific action by {config.FRIENDLY_NAME}, such as replying in a detailed manner or sending specific files,
+                then use the CREATE_TASK tool to generate a new task in the Tasks folder. 
+                Email:  {ai_summary}"""
+
+                if publish.lower() == "true":
+                    publish_email_card("Email Review", email, summary)
+                    if follow_up:
+                        send_to_bot(config.USER_ID,task_prompt)
+                    return config.PROMPT_PUBLISH_TRUE
+                else:
+                    if follow_up:
+                        send_to_bot(config.USER_ID,task_prompt)
+                    return ai_summary
+        
+            return "No emails"
 
         except Exception as e:
             traceback.print_exc()
-            return f'To use the tool you must provide one of the following parameters "EmailID" or "ConversationID"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
@@ -383,152 +385,190 @@ class MSGetEmailDetail(BaseTool):
 
 
 class MSDraftEmail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "DRAFT_EMAIL"
-    description = f"""useful for when you need to create a draft new email.
-    Input should be a json string with three keys: "recipient" "subject" and "body" and optional "user_improvements" and "previous_draft"
-    recipient should be a valid email address. user_improvements help the human direct the draft email and can be used in combination with the previous_draft.
-    Be careful to always use double quotes for strings in the json string 
-    """
-    return_direct= True
-    def _run(self, recipient: str, subject: str, body: str, user_improvements: str = None, previous_draft: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    summary = """useful for when you need to create a draft new email."""
+    parameters.append({"name": "recipient", "description": "A valid email address" })
+    parameters.append({"name": "subject", "description": "Email subject" })
+    parameters.append({"name": "body", "description": "HTML formated email body" })
+    optional_parameters.append({"name": "user_improvements", "description": "Direct the draft email and can be used in combination with the previous_draft" })
+    optional_parameters.append({"name": "previous_draft", "description": "To be used with the user_improvements" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
+
+    def _run(self, recipient: str, subject: str, body: str, user_improvements: str = None, previous_draft: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             response = draft_email(recipient, subject, body, user_improvements, previous_draft)
-            #email_response = forward_email_summary(summary, user_improvements, previous_draft)
-            publish_draft_card("New Draft Email", response, body, reply=False)
-            response.delete()
-            #return generate_response(response)
+            ai_summary = format_email_summary_only(response, body)
+
+            if publish.lower() == "true":
+                publish_draft_card("New Draft Email", response, body, reply=False)
+                response.delete()
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                response.delete()
+                return ai_summary
+
         except Exception as e:
             traceback.print_exc()
-            return f'Input should be a json string with three keys: "recipient" "subject" and "body"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("CREATE_EMAIL does not support async")
+        raise NotImplementedError("DRAFT_EMAIL does not support async")
 
 class MSSendEmail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "SEND_EMAIL"
-    description = f"""useful for when you need to send a draft email.
-    Input should be a json string with three keys: "recipient" "subject", "body"
-    recipient should be a valid email address.
-    Be careful to always use double quotes for strings in the json string 
-    """
+    summary = """useful for when you need to send an email."""
+    parameters.append({"name": "recipient", "description": "A valid email address" })
+    parameters.append({"name": "subject", "description": "Email subject" })
+    parameters.append({"name": "body", "description": "HTML formated email body" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
-    return_direct= True
-    def _run(self, recipient: str, subject: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    def _run(self, recipient: str, subject: str, body: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             response = draft_email(recipient, subject, body, save=True)
-            publish("Email saved - Please manually send from outlook")
-            return "Done"
+            if publish.lower() == "true":
+                publish("A draft email is saved - Please manually send from outlook")
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return "AI is not allowed to email directly, A draft email is saved - Please manually send from outlook"
+
         except Exception as e:
             traceback.print_exc()
-            return f'Input should be a json string with three keys: "recipient" "subject", "body"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("CREATE_EMAIL does not support async")
+        raise NotImplementedError("SEND_EMAIL does not support async")
 
 class MSReplyToEmail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "REPLY_TO_EMAIL"
-    description = """useful for when you need to create a reply to an existing email chain.
-    To use the tool you must provide the following parameter "ConversationID" "body"
-    Be careful to always use double quotes for strings in the json string 
-    """
+    summary = """useful for when you need to create a reply to an existing email chain."""
+    parameters.append({"name": "ConversationID", "description": "A valid email conversation ID" })
+    parameters.append({"name": "body", "description": "HTML formated email body" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
-    return_direct= True
-    def _run(self, ConversationID: str, body: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    def _run(self, ConversationID: str, body: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            #create a draft email card and sends to the user for approval
             response = create_email_reply(ConversationID, body, True)
-            publish("Email saved - Please manually send from outlook")
-            return "Done"
+            if publish.lower() == "true":
+                publish("A draft email is saved - Please manually send from outlook")
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return "AI is not allowed to email directly, A draft email is saved - Please manually send from outlook"
+
         except Exception as e:
             traceback.print_exc()
-            return f'To use the tool you must provide the following parameter "subject" "body"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
         raise NotImplementedError("REPLY_TO_EMAIL does not support async")
 
 class MSForwardEmail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "FORWARD_EMAIL"
-    description = """useful for when you need to create a forward email to an existing email chain.
-    To use the tool you must provide the following parameters "ConversationID" "body" "recipients"
-    Be careful to always use double quotes for strings in the json string 
-    """
+    summary = """useful for when you need to create a forward email to an existing email chain."""
+    parameters.append({"name": "ConversationID", "description": "A valid email conversation ID" })
+    parameters.append({"name": "body", "description": "HTML formated email body" })
+    parameters.append({"name": "recipient", "description": "email addresses" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
-    return_direct= True
-    def _run(self, ConversationID: str, body: str,recipients: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    def _run(self, ConversationID: str, body: str, recipient: str, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
-            #create a draft email card and sends to the user for approval
-            forward_email = create_email_forward(ConversationID, recipients, body, True)
-            publish("Email saved - Please manually send from outlook")
-            return "Done"
+            forward_email = create_email_forward(ConversationID, recipient, body, True)
+            if publish.lower() == "true":
+                publish("A draft email is saved - Please manually send from outlook")
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                return "AI is not allowed to email directly, A draft email is saved - Please manually send from outlook"
+
         except Exception as e:
             traceback.print_exc()
-            return f'To use the tool you must provide the following parameter "subject" "body"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("REPLY_TO_EMAIL does not support async")
+        raise NotImplementedError("FORWARD_EMAIL does not support async")
 
 class MSDraftForwardEmail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "DRAFT_FORWARD_TO_EMAIL"
-    description = """useful for when you need to generate a forward email to an existing email chain.
-    To use the tool you must provide the following parameter "ConversationID" "recipients" and optional "user_improvements" and "previous_draft"
-    user_improvements help the human direct the draft email and can be used in combination with the previous_draft.
-    Be careful to always use double quotes for strings in the json string 
-    """
+    summary = "useful for when you need to generate a forward email to an existing email chain."
+    parameters.append({"name": "ConversationID", "description": "A valid email conversation ID" })
+    parameters.append({"name": "recipient", "description": "A valid email address" })
+    optional_parameters.append({"name": "user_improvements", "description": "Direct the draft email and can be used in combination with the previous_draft" })
+    optional_parameters.append({"name": "previous_draft", "description": "To be used with the user_improvements" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
-    return_direct= True
-    def _run(self, ConversationID: str, recipients: str, user_improvements: str = None, previous_draft: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    def _run(self, ConversationID: str, recipients: str, user_improvements: str = None, previous_draft: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             email_chain = get_conversation(ConversationID)
             summary = get_email_summary(clean_html(email_chain.body))
-            email_response = forward_email_summary(summary, user_improvements, previous_draft)
 
+            email_response = forward_email_summary(summary, user_improvements, previous_draft)
             forward_email = create_email_forward(ConversationID, recipients, email_response, False)
-            
-            publish_draft_forward_card("New Forward Draft Email", forward_email, email_response)
-            forward_email.delete()
-            return "Done"
+
+            ai_summary = format_email_summary_only(forward_email, email_response)
+
+            if publish.lower() == "true":
+                publish_draft_forward_card("New Forward Draft Email", forward_email, email_response)
+                forward_email.delete()
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                forward_email.delete()
+                return ai_summary
         except Exception as e:
             traceback.print_exc()
-            return f'To use the tool you must provide the following parameter "ConversationID" "recipients" and optional "user_improvements" and "previous_draft"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("REPLY_TO_EMAIL does not support async")
+        raise NotImplementedError("DRAFT_FORWARD_TO_EMAIL does not support async")
 
 class MSDraftReplyToEmail(BaseTool):
+    parameters = []
+    optional_parameters = []
     name = "DRAFT_REPLY_TO_EMAIL"
-    description = """useful for when you need to generate a reply to an existing email chain.
-    To use the tool you must provide the following parameter "ConversationID", and optional "user_improvements" and "previous_draft"
-    user_improvements help the human direct the draft email response and can be used in combination with the previous_draft.
-    Be careful to always use double quotes for strings in the json string 
-    """
+    summary = """useful for when you need to generate a reply to an existing email chain."""
+    parameters.append({"name": "ConversationID", "description": "A valid email conversation ID" })
+    optional_parameters.append({"name": "user_improvements", "description": "Direct the draft email and can be used in combination with the previous_draft" })
+    optional_parameters.append({"name": "previous_draft", "description": "To be used with the user_improvements" })
+    description = tool_description(name, summary, parameters, optional_parameters)
+    return_direct = False
 
-    return_direct= True
-    def _run(self, ConversationID: str, user_improvements: str = None, previous_draft: str = None, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Use the tool."""
+    def _run(self, ConversationID: str, user_improvements: str = None, previous_draft: str = None, publish: str = "True", run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         try:
             email_chain = get_conversation(ConversationID)
             summary = get_email_summary(email_chain, clean_html(email_chain.body))
             email_response = reply_to_email_summary(summary, user_improvements, previous_draft)
-
             reply_email = create_email_reply(ConversationID, email_response)
 
-            publish_draft_card("New Draft Email", reply_email, email_response, True)
-            reply_email.delete()
-            return "Done"
+            ai_summary = format_email_summary_only(reply_email, email_response)
+            if publish.lower() == "true":
+                publish_draft_card("New Draft Email", reply_email, email_response, True)
+                reply_email.delete()
+                return config.PROMPT_PUBLISH_TRUE
+            else:
+                reply_email.delete()
+                return ai_summary
+
         except Exception as e:
             traceback.print_exc()
-            return f'To use the tool you must provide the following parameter "ConversationID", and optional "user_improvements" and "previous_draft"'
+            return tool_error(e, self.description)
     
     async def _arun(self, query: str, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("REPLY_TO_EMAIL does not support async")
+        raise NotImplementedError("DRAFT_REPLY_TO_EMAIL does not support async")

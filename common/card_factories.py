@@ -593,7 +593,15 @@ def create_todo_card(message,event):
                     "type": "Action.OpenUrl",
                     "title": "Open in Todo",
                     "url": link
+                },
+                {
+                "type": "Action.Submit",
+                "title": "Modify",
+                "mode": "secondary",
+                "data": {
+                    "acDecision": f"Please use the SET_TASK_COMPLETE tool using task_id: {event.task_id} to mark the task as complete"
                 }
+            }
             ]
     }
 

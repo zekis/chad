@@ -1,7 +1,7 @@
 import json
 from datetime import date, timedelta
 import config
-from bots.langchain_credential_manager import GetCredentials, GetCredential, CreateCredential, UpdateCredential, DeleteCredential
+#from bots.langchain_credential_manager import GetCredentials, GetCredential, CreateCredential, UpdateCredential, DeleteCredential
 from common.utils import create_email
 #from bots.loaders.outlook import get_email_summary
 
